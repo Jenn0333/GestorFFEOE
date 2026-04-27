@@ -1,0 +1,57 @@
+# ================================
+# REACT / NODE
+# ================================
+node_modules/
+dist/
+build/
+.next/
+out/
+.cache/
+.parcel-cache/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+coverage/
+
+# ================================
+# FASTAPI / PYTHON
+# ================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ================================
+# POSTGRESQL
+# ================================
+*.dump
+*.pgdump
+pg_data/
+postgres_data/
+
+# ================================
+# ENTORNO Y SECRETOS
+# ================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ================================
+# OS / EDITOR
+# ================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
