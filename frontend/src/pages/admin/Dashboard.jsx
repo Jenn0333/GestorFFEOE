@@ -1,15 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API = import.meta.env.VITE_API_URL;
-const getToken = () => localStorage.getItem("token");
-const apiFetch = (path, options = {}) =>
-  fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${getToken()}`,
-      ...(options.headers || {}),
-    },
-  });
+import { apiFetch } from "../../utils/apiFetch";
 
 const C = {
   green: "#1D9E75",
