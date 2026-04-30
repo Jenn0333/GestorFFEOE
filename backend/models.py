@@ -35,13 +35,12 @@ class Empresa(Base):
 class Alumno(Base):
     __tablename__ = "alumno"
     id = Column(Integer, primary_key=True, index=True)
-    # Reemplazamos campos duplicados por una FK al usuario[cite: 3]
     usuario_id = Column(Integer, ForeignKey("usuario.id"), unique=True)
     cv_url = Column(String(255))
     ciclo_id = Column(Integer, ForeignKey("ciclo.id"))
     estado_asignacion = Column(String(20), default="Pendiente")
-    
     usuario_base = relationship("Usuario", back_populates="datos_alumno")
+    asignacion = relationship("Asignacion", back_populates="alumno", uselist=False)
 
 class TutorLaboral(Base):
     __tablename__ = "tutor_laboral"

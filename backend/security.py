@@ -10,7 +10,7 @@ def hash_password(password: str):
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-SECRET_KEY = "tu_clave_secreta_super_segura" # ¡Cámbiala!
+SECRET_KEY = "asdewq777"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

@@ -18,17 +18,24 @@ class CicloResponse(CicloBase):
 
 # Esquema para Alumnos
 class AlumnoBase(BaseModel):
-    nombre: str
-    email: EmailStr
-    telefono: Optional[str] = None
     ciclo_id: int
+    cv_url: Optional[str] = None
 
 class AlumnoCreate(AlumnoBase):
-    pass
+    # Al crear un alumno desde el endpoint de profesor, 
+    # necesitamos los datos para crear su Usuario base también.
+    nombre: str
+    email: EmailStr
 
-class AlumnoResponse(AlumnoBase):
+class AlumnoResponse(BaseModel):
     id: int
+    usuario_id: int
+    ciclo_id: int
     estado_asignacion: str
+    cv_url: Optional[str] = None
+    
+    # Para que el Frontend vea el nombre y email del usuario base
+    # (Esto requiere usar 'from_attributes' y acceder a la relación en el modelo)
     class Config:
         from_attributes = True
 

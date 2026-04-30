@@ -119,7 +119,7 @@ def crear_asignacion(asignacion: schemas.AsignacionCreate, db: Session = Depends
 
 # --- RUTAS DE SEGUIMIENTO ---
 @app.post("/seguimientos/", response_model=schemas.SeguimientoResponse)
-def registrar_seguimiento(seguimiento: schemas.SeguimientoCreate, db: Session = Depends(get_db)):
+def registrar_seguimiento(seguimiento: schemas.SeguimientoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # 1. Verificar que el profesor (usuario) existe y es realmente un profesor
     profe = db.query(models.Usuario).filter(models.Usuario.id == seguimiento.profesor_id).first()
     if not profe:
@@ -177,21 +177,11 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
     errores = []
 
     for i, row in enumerate(reader):
+        temp_password = hash_password("Cambiame123")
         try:
-            ciclo_id = int(row['ciclo_id'])
-            
-            # 2. VALIDACIÓN: ¿Existe el ciclo?[cite: 3]
-            if ciclo_id not in ciclos_existentes:
-                errores.append(f"Fila {i+1}: El ciclo {ciclo_id} no existe.")
-                continue
+            # Dentro del bucle de importación:
+            c_id = int(row['ciclo_id'])
 
-            # 3. VALIDACIÓN: ¿Email duplicado?[cite: 3]
-            if db.query(models.Usuario).filter(models.Usuario.email == row['email']).first():
-                errores.append(f"Fila {i+1}: El email {row['email']} ya está registrado.")
-                continue
-
-            # 4. PROCESO DE CREACIÓN[cite: 3, 6]
-            temp_password = hash_password("cambiame123") 
             nuevo_usuario = models.Usuario(
                 nombre=row['nombre'],
                 email=row['email'],
@@ -199,11 +189,11 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
                 rol="alumno"
             )
             db.add(nuevo_usuario)
-            db.flush() 
+            db.flush() # Esto asigna el ID a nuevo_usuario sin cerrar la transacción
 
             nuevo_alumno = models.Alumno(
-                usuario_id=nuevo_usuario.id,
-                ciclo_id=ciclo_id
+                usuario_id=nuevo_usuario.id, # Vinculación correcta
+                ciclo_id=c_id
             )
             db.add(nuevo_alumno)
             alumnos_creados += 1
@@ -273,7 +263,7 @@ def listar_plazas_disponibles(db: Session = Depends(get_db)):
 # --- RUTAS DE TUTORES LABORALES ---
 
 @app.post("/tutores/", response_model=schemas.TutorLaboralResponse)
-def crear_tutor(tutor: schemas.TutorLaboralCreate, db: Session = Depends(get_db)):
+def crear_tutor(tutor: schemas.TutorLaboralCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # Verificamos que la empresa existe antes de asignarle un tutor
     empresa = db.query(models.Empresa).filter(models.Empresa.id == tutor.empresa_id).first()
     if not empresa:
