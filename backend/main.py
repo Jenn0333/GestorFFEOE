@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List
 import models, schemas
@@ -6,6 +7,7 @@ from database import SessionLocal, engine
 from security import verify_password, create_access_token, hash_password
 import csv
 import codecs
+import os
 
 # Crea las tablas físicamente en la BD al arrancar
 models.Base.metadata.create_all(bind=engine)
@@ -15,6 +17,13 @@ app = FastAPI(
     description="API para la gestión de prácticas FCT",
     version="1.0.0"
 )
+
+# Crear la carpeta de archivos si no existe
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
+
+# Montar la carpeta para que los archivos sean accesibles vía URL
+app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
 # Dependencia para obtener la sesión de la BD
 def get_db():
@@ -195,3 +204,80 @@ def crear_o_actualizar_plaza(plaza: schemas.PlazaCreate, db: Session = Depends(g
 def listar_plazas_disponibles(db: Session = Depends(get_db)):
     # Filtramos las plazas donde la cantidad ocupada es menor a la total[cite: 3]
     return db.query(models.Plaza).filter(models.Plaza.cantidad_ocupada < models.Plaza.cantidad_total).all()
+
+# --- RUTAS DE TUTORES LABORALES ---
+
+@app.post("/tutores/", response_model=schemas.TutorLaboralResponse)
+def crear_tutor(tutor: schemas.TutorLaboralCreate, db: Session = Depends(get_db)):
+    # Verificamos que la empresa existe antes de asignarle un tutor
+    empresa = db.query(models.Empresa).filter(models.Empresa.id == tutor.empresa_id).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="La empresa no existe")
+    
+    nuevo_tutor = models.TutorLaboral(**tutor.model_dump())
+    db.add(nuevo_tutor)
+    db.commit()
+    db.refresh(nuevo_tutor)
+    return nuevo_tutor
+
+@app.get("/empresas/{empresa_id}/tutores", response_model=List[schemas.TutorLaboralResponse])
+def listar_tutores_empresa(empresa_id: int, db: Session = Depends(get_db)):
+    # Esto servirá para que el frontend rellene un desplegable al asignar
+    return db.query(models.TutorLaboral).filter(models.TutorLaboral.empresa_id == empresa_id).all()
+
+@app.post("/alumnos/{alumno_id}/upload-cv/")
+async def subir_cv(alumno_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # 1. Validar que sea un PDF
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF")
+
+    # 2. Buscar al alumno en la BD
+    db_alumno = db.query(models.Alumno).filter(models.Alumno.id == alumno_id).first()
+    if not db_alumno:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado")
+
+    # 3. Guardar el archivo físicamente
+    file_path = f"uploads/cv_{alumno_id}.pdf"
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+
+    # 4. Guardar la URL en la base de datos[cite: 3]
+    db_alumno.cv_url = f"/static/cv_{alumno_id}.pdf"
+    db.commit()
+
+    return {"message": "CV subido con éxito", "url": db_alumno.cv_url}
+
+@app.get("/alumnos/{alumno_id}/dashboard")
+def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db)):
+    # Buscamos al alumno y unimos con su ciclo, asignación, plaza y empresa[cite: 3]
+    alumno = db.query(models.Alumno).filter(models.Alumno.id == alumno_id).first()
+    
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Alumno no encontrado")
+
+    # Intentamos obtener la asignación si existe[cite: 3]
+    asignacion = db.query(models.Asignacion).filter(models.Asignacion.alumno_id == alumno_id).first()
+    
+    detalles_asignacion = None
+    if asignacion:
+        # Si está asignado, sacamos los nombres de la empresa y el tutor
+        plaza = db.query(models.Plaza).filter(models.Plaza.id == asignacion.plaza_id).first()
+        empresa = db.query(models.Empresa).filter(models.Empresa.id == plaza.empresa_id).first()
+        tutor = db.query(models.TutorLaboral).filter(models.TutorLaboral.id == asignacion.tutor_laboral_id).first()
+        
+        detalles_asignacion = {
+            "empresa": empresa.nombre,
+            "direccion": empresa.direccion,
+            "tutor_laboral": tutor.nombre if tutor else "No asignado aún",
+            "fecha_inicio": asignacion.fecha_asignacion
+        }
+
+    return {
+        "perfil": {
+            "nombre": alumno.nombre,
+            "email": alumno.email,
+            "estado": alumno.estado_asignacion, # 'Pendiente' o 'Asignado'[cite: 3]
+            "cv_url": alumno.cv_url
+        },
+        "asignacion": detalles_asignacion
+    }
