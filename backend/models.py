@@ -16,8 +16,9 @@ class Usuario(Base):
     nombre = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    rol = Column(String(20)) # 'admin' o 'profesor'
-    ciclo_id = Column(Integer, ForeignKey("ciclo.id"), nullable=True)
+    rol = Column(String(20)) # Ahora aceptará: 'admin', 'profesor' o 'alumno'
+    # Relación opcional: solo si es alumno tendrá datos de alumno
+    datos_alumno = relationship("Alumno", back_populates="usuario_base", uselist=False)
 
 class Empresa(Base):
     __tablename__ = "empresa"
@@ -34,14 +35,13 @@ class Empresa(Base):
 class Alumno(Base):
     __tablename__ = "alumno"
     id = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String(100), nullable=False)
-    email = Column(String(150), unique=True, nullable=False)
-    telefono = Column(String(20))
+    # Reemplazamos campos duplicados por una FK al usuario[cite: 3]
+    usuario_id = Column(Integer, ForeignKey("usuario.id"), unique=True)
     cv_url = Column(String(255))
     ciclo_id = Column(Integer, ForeignKey("ciclo.id"))
     estado_asignacion = Column(String(20), default="Pendiente")
-
-# ... (Tus clases Ciclo, Usuario, Empresa y Alumno se mantienen igual)
+    
+    usuario_base = relationship("Usuario", back_populates="datos_alumno")
 
 class TutorLaboral(Base):
     __tablename__ = "tutor_laboral"

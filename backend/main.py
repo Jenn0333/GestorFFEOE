@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from typing import List
 import models, schemas
@@ -8,6 +9,8 @@ from security import verify_password, create_access_token, hash_password
 import csv
 import codecs
 import os
+from jose import JWTError, jwt
+import security
 
 # Crea las tablas físicamente en la BD al arrancar
 models.Base.metadata.create_all(bind=engine)
@@ -25,6 +28,8 @@ if not os.path.exists("uploads"):
 # Montar la carpeta para que los archivos sean accesibles vía URL
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 # Dependencia para obtener la sesión de la BD
 def get_db():
     db = SessionLocal()
@@ -33,13 +38,42 @@ def get_db():
     finally:
         db.close()
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="No se pudo validar el usuario",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        # Decodificamos el token usando tu SECRET_KEY[cite: 6]
+        payload = jwt.decode(token, security.SECRET_KEY, algorithms=[security.ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+        
+    user = db.query(models.Usuario).filter(models.Usuario.email == email).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+def check_profesor_role(current_user: models.Usuario = Depends(get_current_user)):
+    # Solo permitimos el paso si el rol es 'profesor' o 'admin'[cite: 3]
+    if current_user.rol not in ["profesor", "admin"]:
+        raise HTTPException(
+            status_code=403, 
+            detail="No tienes permisos suficientes para realizar esta acción"
+        )
+    return current_user
+
 @app.get("/")
 def read_root():
     return {"message": "Bienvenido al GestorFFEOE API"}
 
 # --- RUTAS DE CICLOS ---
 @app.post("/ciclos/", response_model=schemas.CicloResponse)
-def crear_ciclo(ciclo: schemas.CicloCreate, db: Session = Depends(get_db)):
+def crear_ciclo(ciclo: schemas.CicloCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     db_ciclo = models.Ciclo(**ciclo.model_dump())
     db.add(db_ciclo)
     db.commit()
@@ -47,11 +81,11 @@ def crear_ciclo(ciclo: schemas.CicloCreate, db: Session = Depends(get_db)):
     return db_ciclo
 
 @app.get("/ciclos/", response_model=List[schemas.CicloResponse])
-def listar_ciclos(db: Session = Depends(get_db)):
+def listar_ciclos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     return db.query(models.Ciclo).all()
 
 @app.post("/asignaciones/")
-def crear_asignacion(asignacion: schemas.AsignacionCreate, db: Session = Depends(get_db)):
+def crear_asignacion(asignacion: schemas.AsignacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # 1. Buscar la plaza seleccionada y el alumno
     db_plaza = db.query(models.Plaza).filter(models.Plaza.id == asignacion.plaza_id).first()
     db_alumno = db.query(models.Alumno).filter(models.Alumno.id == asignacion.alumno_id).first()
@@ -130,31 +164,62 @@ def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db))
     return {"message": "Usuario creado con éxito"}
 
 @app.post("/alumnos/importar/")
-async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    # 1. Validar que sea un CSV
+async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)
+):
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
 
-    # 2. Leer el contenido del archivo
+    # 1. Obtener todos los IDs de ciclos existentes para validar rápido
+    ciclos_existentes = {c.id for c in db.query(models.Ciclo.id).all()}
+    
     reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
-    
     alumnos_creados = 0
-    for row in reader:
-        # 3. Crear el alumno en la base de datos usando tu modelo
-        nuevo_alumno = models.Alumno(
-            nombre=row['nombre'],
-            email=row['email'],
-            telefono=row.get('telefono'),
-            ciclo_id=int(row['ciclo_id'])
-        )
-        db.add(nuevo_alumno)
-        alumnos_creados += 1
-    
+    errores = []
+
+    for i, row in enumerate(reader):
+        try:
+            ciclo_id = int(row['ciclo_id'])
+            
+            # 2. VALIDACIÓN: ¿Existe el ciclo?[cite: 3]
+            if ciclo_id not in ciclos_existentes:
+                errores.append(f"Fila {i+1}: El ciclo {ciclo_id} no existe.")
+                continue
+
+            # 3. VALIDACIÓN: ¿Email duplicado?[cite: 3]
+            if db.query(models.Usuario).filter(models.Usuario.email == row['email']).first():
+                errores.append(f"Fila {i+1}: El email {row['email']} ya está registrado.")
+                continue
+
+            # 4. PROCESO DE CREACIÓN[cite: 3, 6]
+            temp_password = hash_password("cambiame123") 
+            nuevo_usuario = models.Usuario(
+                nombre=row['nombre'],
+                email=row['email'],
+                password_hash=temp_password,
+                rol="alumno"
+            )
+            db.add(nuevo_usuario)
+            db.flush() 
+
+            nuevo_alumno = models.Alumno(
+                usuario_id=nuevo_usuario.id,
+                ciclo_id=ciclo_id
+            )
+            db.add(nuevo_alumno)
+            alumnos_creados += 1
+
+        except Exception as e:
+            errores.append(f"Fila {i+1}: Error inesperado - {str(e)}")
+
     db.commit()
-    return {"message": f"Se han importado {alumnos_creados} alumnos correctamente"}
+    
+    return {
+        "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
+        "errores": errores # Esto ayuda al profesor a saber qué filas fallaron
+    }
 
 @app.post("/empresas/importar/")
-async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # 1. Validar extensión
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
@@ -181,7 +246,7 @@ async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depe
     return {"message": f"Se han importado {empresas_creadas} empresas correctamente"}
 
 @app.post("/plazas/", response_model=schemas.PlazaResponse)
-def crear_o_actualizar_plaza(plaza: schemas.PlazaCreate, db: Session = Depends(get_db)):
+def crear_o_actualizar_plaza(plaza: schemas.PlazaCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # 1. Verificar si ya existe una configuración de plazas para esa empresa y ciclo
     db_plaza = db.query(models.Plaza).filter(
         models.Plaza.empresa_id == plaza.empresa_id,
@@ -281,3 +346,19 @@ def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db)):
         },
         "asignacion": detalles_asignacion
     }
+
+@app.get("/alumnos/me/dashboard")
+def obtener_mi_dashboard(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Verificamos que el usuario logueado realmente tenga rol de alumno
+    if current_user.rol != "alumno":
+        raise HTTPException(status_code=403, detail="Acceso denegado: No eres un alumno")
+
+    # 2. Buscamos la extensión de datos de ese alumno
+    alumno = db.query(models.Alumno).filter(models.Alumno.usuario_id == current_user.id).first()
+    
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Datos de alumno no encontrados para este usuario")
+
+    # 3. Llamamos a la lógica que ya tenías para montar el dashboard
+    # Pasamos el ID del ALUMNO (de su tabla específica), no del usuario base
+    return obtener_dashboard_alumno(alumno.id, db)
