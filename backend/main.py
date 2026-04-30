@@ -170,3 +170,28 @@ async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depe
     
     db.commit()
     return {"message": f"Se han importado {empresas_creadas} empresas correctamente"}
+
+@app.post("/plazas/", response_model=schemas.PlazaResponse)
+def crear_o_actualizar_plaza(plaza: schemas.PlazaCreate, db: Session = Depends(get_db)):
+    # 1. Verificar si ya existe una configuración de plazas para esa empresa y ciclo
+    db_plaza = db.query(models.Plaza).filter(
+        models.Plaza.empresa_id == plaza.empresa_id,
+        models.Plaza.ciclo_id == plaza.ciclo_id
+    ).first()
+
+    if db_plaza:
+        # Si existe, actualizamos el total
+        db_plaza.cantidad_total = plaza.cantidad_total
+    else:
+        # Si no existe, creamos el registro
+        db_plaza = models.Plaza(**plaza.model_dump())
+        db.add(db_plaza)
+    
+    db.commit()
+    db.refresh(db_plaza)
+    return db_plaza
+
+@app.get("/plazas/disponibles", response_model=List[schemas.PlazaResponse])
+def listar_plazas_disponibles(db: Session = Depends(get_db)):
+    # Filtramos las plazas donde la cantidad ocupada es menor a la total[cite: 3]
+    return db.query(models.Plaza).filter(models.Plaza.cantidad_ocupada < models.Plaza.cantidad_total).all()
