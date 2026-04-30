@@ -1,9 +1,11 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 import models, schemas
 from database import SessionLocal, engine
 from security import verify_password, create_access_token, hash_password
+import csv
+import codecs
 
 # Crea las tablas físicamente en la BD al arrancar
 models.Base.metadata.create_all(bind=engine)
@@ -117,3 +119,54 @@ def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db))
     db.add(db_usuario)
     db.commit()
     return {"message": "Usuario creado con éxito"}
+
+@app.post("/alumnos/importar/")
+async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # 1. Validar que sea un CSV
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
+
+    # 2. Leer el contenido del archivo
+    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
+    
+    alumnos_creados = 0
+    for row in reader:
+        # 3. Crear el alumno en la base de datos usando tu modelo
+        nuevo_alumno = models.Alumno(
+            nombre=row['nombre'],
+            email=row['email'],
+            telefono=row.get('telefono'),
+            ciclo_id=int(row['ciclo_id'])
+        )
+        db.add(nuevo_alumno)
+        alumnos_creados += 1
+    
+    db.commit()
+    return {"message": f"Se han importado {alumnos_creados} alumnos correctamente"}
+
+@app.post("/empresas/importar/")
+async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # 1. Validar extensión
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
+
+    # 2. Leer CSV
+    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
+    
+    empresas_creadas = 0
+    for row in reader:
+        # 3. Crear instancia del modelo Empresa
+        nueva_empresa = models.Empresa(
+            nombre=row['nombre'],
+            direccion=row.get('direccion'),
+            web=row.get('web'),
+            persona_contacto=row.get('persona_contacto'),
+            email=row.get('email'),
+            telefono=row.get('telefono'),
+            responsable_legal_dni=row.get('responsable_legal_dni')
+        )
+        db.add(nueva_empresa)
+        empresas_creadas += 1
+    
+    db.commit()
+    return {"message": f"Se han importado {empresas_creadas} empresas correctamente"}
