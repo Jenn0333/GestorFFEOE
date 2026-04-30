@@ -1,9 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-
 import models, schemas
 from database import SessionLocal, engine
+from security import verify_password, create_access_token, hash_password
 
 # Crea las tablas físicamente en la BD al arrancar
 models.Base.metadata.create_all(bind=engine)
@@ -93,3 +93,27 @@ def registrar_seguimiento(seguimiento: schemas.SeguimientoCreate, db: Session = 
     db.refresh(nuevo_seguimiento)
     
     return nuevo_seguimiento
+
+@app.post("/token")
+def login(form_data: schemas.UserLogin, db: Session = Depends(get_db)):
+    user = db.query(models.Usuario).filter(models.Usuario.email == form_data.email).first()
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Email o contraseña incorrectos")
+    
+    access_token = create_access_token(data={"sub": user.email, "rol": user.rol})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/usuarios/")
+def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db)):
+    # Encriptamos la contraseña antes de guardarla
+    hashed_pwd = hash_password(usuario.password)
+    
+    db_usuario = models.Usuario(
+        nombre=usuario.nombre,
+        email=usuario.email,
+        rol=usuario.rol,
+        password_hash=hashed_pwd  # Guardamos el hash, no la clave real[cite: 4]
+    )
+    db.add(db_usuario)
+    db.commit()
+    return {"message": "Usuario creado con éxito"}
