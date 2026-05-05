@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-
 import { apiFetch } from "../../utils/apiFetch";
 
-// ── Colores del proyecto (mismo verde que el Login) ──────────────────────────
 const C = {
   green: "#1D9E75",
   greenDark: "#085041",
@@ -33,9 +31,13 @@ function EstadoBadge({ estado }) {
       dot: C.green,
       label: "Asignado",
     },
-    default: { bg: "#F1EFE8", color: "#5F5E5A", dot: "#B4B2A9", label: estado },
   };
-  const s = config[estado] || config.default;
+  const s = config[estado] || {
+    bg: "#F1EFE8",
+    color: "#5F5E5A",
+    dot: "#B4B2A9",
+    label: estado,
+  };
   return (
     <span
       style={{
@@ -101,7 +103,6 @@ export default function AlumnoDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Formulario de contacto
   const [contacto, setContacto] = useState({
     telefono: "",
     direccion: "",
@@ -110,21 +111,38 @@ export default function AlumnoDashboard() {
   const [guardando, setGuardando] = useState(false);
   const [mensajeContacto, setMensajeContacto] = useState("");
 
-  // CV
   const [cvFile, setCvFile] = useState(null);
   const [subiendoCV, setSubiendoCV] = useState(false);
   const [mensajeCV, setMensajeCV] = useState("");
 
-  // Carga inicial de datos del alumno
+  // ── Carga de datos desde /alumnos/me/dashboard ────────────────────────────
   useEffect(() => {
-    apiFetch("/alumnos/me")
+    apiFetch("/alumnos/me/dashboard")
       .then((r) => r.json())
       .then((data) => {
-        setAlumno(data);
+        // El backend devuelve { perfil: {...}, asignacion: {...} | null }
+        // Lo aplanamos para que el componente lo use fácilmente
+        const alumnoData = {
+          nombre: data.perfil.nombre,
+          email: data.perfil.email,
+          estado_asignacion: data.perfil.estado,
+          cv_url: data.perfil.cv_url,
+          // Datos de asignación si existen
+          empresa: data.asignacion
+            ? {
+                nombre: data.asignacion.empresa,
+                direccion: data.asignacion.direccion,
+              }
+            : null,
+          tutor_laboral: data.asignacion
+            ? { nombre: data.asignacion.tutor_laboral }
+            : null,
+        };
+        setAlumno(alumnoData);
         setContacto({
-          telefono: data.telefono || "",
-          direccion: data.direccion || "",
-          linkedin: data.linkedin || "",
+          telefono: alumnoData.telefono || "",
+          direccion: alumnoData.direccion || "",
+          linkedin: alumnoData.linkedin || "",
         });
       })
       .catch(() =>
@@ -133,7 +151,8 @@ export default function AlumnoDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Guardar datos de contacto
+  // ── Guardar contacto ──────────────────────────────────────────────────────
+  // NOTA PARA EL BACKEND: necesita el endpoint PATCH /alumnos/me/contacto
   const handleGuardarContacto = async (e) => {
     e.preventDefault();
     setGuardando(true);
@@ -144,8 +163,11 @@ export default function AlumnoDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(contacto),
       });
-      if (r.ok) setMensajeContacto("¡Datos actualizados correctamente!");
-      else setMensajeContacto("Error al guardar. Inténtalo de nuevo.");
+      if (r && r.ok) {
+        setMensajeContacto("¡Datos actualizados correctamente!");
+      } else {
+        setMensajeContacto("Error al guardar. Inténtalo de nuevo.");
+      }
     } catch {
       setMensajeContacto("No se pudo conectar con el servidor.");
     } finally {
@@ -153,7 +175,9 @@ export default function AlumnoDashboard() {
     }
   };
 
-  // Subir CV
+  // ── Subir CV ──────────────────────────────────────────────────────────────
+  // El backend tiene /alumnos/{alumno_id}/upload-cv/
+  // Usamos /alumnos/me/upload-cv/ — pedir a backend que añada este endpoint
   const handleSubirCV = async () => {
     if (!cvFile) return;
     if (cvFile.type !== "application/pdf") {
@@ -163,15 +187,15 @@ export default function AlumnoDashboard() {
     setSubiendoCV(true);
     setMensajeCV("");
     const formData = new FormData();
-    formData.append("cv", cvFile);
+    formData.append("file", cvFile);
     try {
-      const r = await apiFetch("/alumnos/me/cv", {
+      const r = await apiFetch("/alumnos/me/upload-cv/", {
         method: "POST",
         body: formData,
       });
-      if (r.ok) {
+      if (r && r.ok) {
         const data = await r.json();
-        setAlumno((prev) => ({ ...prev, cv_url: data.cv_url }));
+        setAlumno((prev) => ({ ...prev, cv_url: data.url }));
         setMensajeCV("¡CV subido correctamente!");
         setCvFile(null);
       } else {
@@ -190,7 +214,7 @@ export default function AlumnoDashboard() {
     window.location.href = "/";
   };
 
-  // ── Estados de carga y error ────────────────────────────────────────────────
+  // ── Estados de carga y error ──────────────────────────────────────────────
   if (loading)
     return (
       <div style={styles.centered}>
@@ -225,10 +249,10 @@ export default function AlumnoDashboard() {
     );
 
   const iniciales = alumno
-    ? `${alumno.nombre?.[0] || ""}${alumno.apellidos?.[0] || ""}`.toUpperCase()
+    ? `${alumno.nombre?.[0] || ""}${alumno.email?.[0] || ""}`.toUpperCase()
     : "?";
 
-  // ── Render principal ────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={styles.page}>
       {/* Navbar */}
@@ -249,7 +273,6 @@ export default function AlumnoDashboard() {
 
       {/* Contenido */}
       <main style={styles.main}>
-        {/* Cabecera */}
         <div style={styles.pageHeader}>
           <div>
             <p style={styles.eyebrow}>Panel del alumno</p>
@@ -259,7 +282,6 @@ export default function AlumnoDashboard() {
           </div>
         </div>
 
-        {/* Grid de tarjetas */}
         <div style={styles.grid}>
           {/* 1. Estado de asignación */}
           <Card title="Estado de prácticas" style={{ gridColumn: "span 2" }}>
@@ -305,9 +327,6 @@ export default function AlumnoDashboard() {
                   >
                     {alumno.tutor_laboral.nombre}
                   </p>
-                  <p style={{ color: C.muted, fontSize: "0.82rem" }}>
-                    {alumno.tutor_laboral.telefono}
-                  </p>
                 </div>
               )}
 
@@ -349,7 +368,7 @@ export default function AlumnoDashboard() {
                   CV actual:
                 </p>
                 <a
-                  href={`${API}${alumno.cv_url}`}
+                  href={`${import.meta.env.VITE_API_URL}${alumno.cv_url}`}
                   target="_blank"
                   rel="noreferrer"
                   style={styles.cvLink}
@@ -373,7 +392,6 @@ export default function AlumnoDashboard() {
               </div>
             )}
 
-            {/* Zona de subida */}
             <label style={styles.dropzone}>
               <input
                 type="file"
@@ -425,6 +443,16 @@ export default function AlumnoDashboard() {
 
           {/* 3. Datos de contacto */}
           <Card title="Mis datos de contacto">
+            <p
+              style={{
+                fontSize: "0.78rem",
+                color: C.muted,
+                marginBottom: "1rem",
+              }}
+            >
+              ⚠️ Estos campos se guardarán cuando el backend tenga el endpoint
+              habilitado.
+            </p>
             <form
               onSubmit={handleGuardarContacto}
               style={{
@@ -495,19 +523,19 @@ export default function AlumnoDashboard() {
             </form>
           </Card>
 
-          {/* 4. Info del alumno */}
+          {/* 4. Perfil */}
           <Card title="Mi perfil" style={{ gridColumn: "span 2" }}>
             <div style={styles.perfilGrid}>
               {[
-                {
-                  label: "Nombre completo",
-                  value: `${alumno?.nombre || ""} ${alumno?.apellidos || ""}`,
-                },
+                { label: "Nombre completo", value: alumno?.nombre || "—" },
                 { label: "Correo electrónico", value: alumno?.email || "—" },
-                { label: "Ciclo formativo", value: alumno?.ciclo || "—" },
                 {
-                  label: "Año académico",
-                  value: alumno?.anno_academico || "—",
+                  label: "Estado de asignación",
+                  value: alumno?.estado_asignacion || "Pendiente",
+                },
+                {
+                  label: "CV",
+                  value: alumno?.cv_url ? "Subido ✓" : "No subido",
                 },
               ].map(({ label, value }) => (
                 <div key={label} style={styles.perfilItem}>
@@ -580,7 +608,6 @@ const styles = {
     padding: "6px 14px",
     fontSize: "0.82rem",
     cursor: "pointer",
-    fontWeight: "500",
   },
   main: { maxWidth: "900px", margin: "0 auto", padding: "2rem 1.5rem" },
   pageHeader: { marginBottom: "1.5rem" },
@@ -598,11 +625,7 @@ const styles = {
     color: C.text,
     letterSpacing: "-0.3px",
   },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, 1fr)",
-    gap: "1rem",
-  },
+  grid: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "1rem" },
   estadoRow: {
     display: "flex",
     gap: "1.5rem",
