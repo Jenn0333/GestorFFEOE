@@ -355,3 +355,13 @@ def obtener_mi_dashboard(db: Session = Depends(get_db), current_user: models.Usu
     # 3. Llamamos a la lógica que ya tenías para montar el dashboard
     # Pasamos el ID del ALUMNO (de su tabla específica), no del usuario base
     return obtener_dashboard_alumno(alumno.id, db)
+
+@app.get("/tablero-asignacion")
+def obtener_datos_tablero(db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    alumnos_pendientes = db.query(models.Alumno).filter(models.Alumno.estado_asignacion == "Pendiente").all()
+    plazas_libres = db.query(models.Plaza).filter(models.Plaza.cantidad_ocupada < models.Plaza.cantidad_total).all()
+    
+    return {
+        "alumnos": alumnos_pendientes,
+        "plazas": plazas_libres
+    }

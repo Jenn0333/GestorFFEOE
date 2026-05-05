@@ -13,8 +13,7 @@ class CicloCreate(CicloBase):
 
 class CicloResponse(CicloBase):
     id: int
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 # Esquema para Alumnos
 class AlumnoBase(BaseModel):
@@ -27,6 +26,15 @@ class AlumnoCreate(AlumnoBase):
     nombre: str
     email: EmailStr
 
+# Añade esto en schemas.py
+class UsuarioCreate(BaseModel):
+    nombre: str
+    email: EmailStr
+    password: str
+    rol: str = "alumno"  # Por defecto alumno, pero el profe puede cambiarlo
+
+    model_config = {"from_attributes": True}
+
 class AlumnoResponse(BaseModel):
     id: int
     usuario_id: int
@@ -36,8 +44,7 @@ class AlumnoResponse(BaseModel):
     
     # Para que el Frontend vea el nombre y email del usuario base
     # (Esto requiere usar 'from_attributes' y acceder a la relación en el modelo)
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 # --- ESQUEMAS DE TUTOR LABORAL ---
 class TutorLaboralBase(BaseModel):
@@ -50,8 +57,7 @@ class TutorLaboralCreate(TutorLaboralBase):
 
 class TutorLaboralResponse(TutorLaboralBase):
     id: int
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 # --- ESQUEMAS DE EMPRESA ---
 class EmpresaBase(BaseModel):
@@ -70,8 +76,7 @@ class EmpresaResponse(EmpresaBase):
     id: int
     # Incluimos los tutores relacionados si existen 
     tutores: List[TutorLaboralResponse] = []
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 # --- ESQUEMAS DE PLAZAS ---
 class PlazaBase(BaseModel):
@@ -86,8 +91,7 @@ class PlazaResponse(PlazaBase):
     id: int
     cantidad_ocupada: int
     plazas_disponibles: int
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 # --- ESQUEMAS DE ASIGNACIÓN (Drag & Drop) ---
 class AsignacionBase(BaseModel):
@@ -101,8 +105,7 @@ class AsignacionCreate(AsignacionBase):
 class AsignacionResponse(AsignacionBase):
     id: int
     fecha_asignacion: datetime
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 # --- ESQUEMAS DE SEGUIMIENTO ---
 class SeguimientoBase(BaseModel):
@@ -116,8 +119,7 @@ class SeguimientoCreate(SeguimientoBase):
 
 class SeguimientoResponse(SeguimientoBase):
     id: int
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 # Esquema para recibir datos de inicio de sesión
 class UserLogin(BaseModel):
