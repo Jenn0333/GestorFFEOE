@@ -11,6 +11,7 @@ import codecs
 import os
 from jose import JWTError, jwt
 import security
+from datetime import datetime
 
 # Crea las tablas físicamente en la BD al arrancar
 models.Base.metadata.create_all(bind=engine)
@@ -84,13 +85,56 @@ def crear_ciclo(ciclo: schemas.CicloCreate, db: Session = Depends(get_db), curre
 def listar_ciclos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     return db.query(models.Ciclo).all()
 
+@app.put("/ciclos/{ciclo_id}", response_model=schemas.CicloResponse)
+def editar_ciclo(ciclo_id: int, ciclo_actualizado: schemas.CicloCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    # 1. Buscar el ciclo existente
+    db_ciclo = db.query(models.Ciclo).filter(models.Ciclo.id == ciclo_id).first()
+    
+    if not db_ciclo:
+        raise HTTPException(status_code=404, detail="El ciclo no existe")
+
+    # 2. Actualizar los campos manualmente o mediante un bucle
+    for key, value in ciclo_actualizado.model_dump().items():
+        setattr(db_ciclo, key, value)
+
+    db.commit()
+    db.refresh(db_ciclo)
+    return db_ciclo
+
+@app.delete("/ciclos/{ciclo_id}")
+def borrar_ciclo(ciclo_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    # 1. Buscar el ciclo
+    db_ciclo = db.query(models.Ciclo).filter(models.Ciclo.id == ciclo_id).first()
+    
+    if not db_ciclo:
+        raise HTTPException(status_code=404, detail="El ciclo no existe")
+
+    # 2. Eliminarlo de la base de datos
+    db.delete(db_ciclo)
+    db.commit()
+    
+    return {"message": f"Ciclo {db_ciclo.nombre} eliminado correctamente"}
+
 @app.post("/asignaciones/")
 def crear_asignacion(asignacion: schemas.AsignacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    # 1. Buscar la plaza seleccionada y el alumno
+    # Validación de fechas
+    config = db.query(models.ConfiguracionGlobal).first()
+    ahora = datetime.now()
+
+    if not config:
+        raise HTTPException(status_code=400, detail="El periodo de asignación no ha sido configurado")
+
+    if not (config.fecha_inicio <= ahora <= config.fecha_fin):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Fuera de plazo. El periodo es del {config.fecha_inicio.date()} al {config.fecha_fin.date()}"
+        )
+    
+    # Buscar la plaza seleccionada y el alumno
     db_plaza = db.query(models.Plaza).filter(models.Plaza.id == asignacion.plaza_id).first()
     db_alumno = db.query(models.Alumno).filter(models.Alumno.id == asignacion.alumno_id).first()
 
-    # 2. VALIDACIONES DE SEGURIDAD
+    # VALIDACIONES DE SEGURIDAD
     if not db_plaza:
         raise HTTPException(status_code=404, detail="La plaza especificada no existe")
     
@@ -106,7 +150,7 @@ def crear_asignacion(asignacion: schemas.AsignacionCreate, db: Session = Depends
         raise HTTPException(status_code=400, detail="No quedan plazas libres en esta empresa para este ciclo")
 
     # 3. PROCESO DE ASIGNACIÓN
-    nueva_asignacion = models.Asignacion(**asignacion.model_dump())
+    nueva_asignacion = models.Asignacion(alumno_id=asignacion.alumno_id, plaza_id=asignacion.plaza_id, tutor_laboral_id=asignacion.tutor_laboral_id)
     
     # 4. ACTUALIZACIÓN DE ESTADOS
     db_plaza.cantidad_ocupada += 1  # Sumamos la plaza ocupada
@@ -306,19 +350,27 @@ async def subir_cv(alumno_id: int, file: UploadFile = File(...), db: Session = D
     return {"message": "CV subido con éxito", "url": db_alumno.cv_url}
 
 @app.get("/alumnos/{alumno_id}/dashboard")
-def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db)):
-    # Buscamos al alumno y unimos con su ciclo, asignación, plaza y empresa[cite: 3]
+def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Buscar al alumno en la BD
     alumno = db.query(models.Alumno).filter(models.Alumno.id == alumno_id).first()
     
     if not alumno:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
 
-    # Intentamos obtener la asignación si existe[cite: 3]
+    # 2. VALIDACIÓN DE SEGURIDAD
+    # Si el usuario NO es profesor/admin Y el ID del usuario no coincide con el del alumno...
+    if current_user.rol not in ["profesor", "admin"]:
+        if alumno.usuario_id != current_user.id:
+            raise HTTPException(
+                status_code=403, 
+                detail="Acceso denegado: No puedes ver el dashboard de otro alumno"
+            )
+
+    # 3. Lógica para montar el dashboard (esto ya lo tenías bien)
     asignacion = db.query(models.Asignacion).filter(models.Asignacion.alumno_id == alumno_id).first()
     
     detalles_asignacion = None
     if asignacion:
-        # Si está asignado, sacamos los nombres de la empresa y el tutor
         plaza = db.query(models.Plaza).filter(models.Plaza.id == asignacion.plaza_id).first()
         empresa = db.query(models.Empresa).filter(models.Empresa.id == plaza.empresa_id).first()
         tutor = db.query(models.TutorLaboral).filter(models.TutorLaboral.id == asignacion.tutor_laboral_id).first()
@@ -332,9 +384,8 @@ def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db)):
 
     return {
         "perfil": {
-            "nombre": alumno.nombre,
-            "email": alumno.email,
-            "estado": alumno.estado_asignacion, # 'Pendiente' o 'Asignado'[cite: 3]
+            "nombre": current_user.nombre if alumno.usuario_id == current_user.id else "Ver en Base de Datos",
+            "estado": alumno.estado_asignacion,
             "cv_url": alumno.cv_url
         },
         "asignacion": detalles_asignacion
@@ -365,3 +416,57 @@ def obtener_datos_tablero(db: Session = Depends(get_db), current_user: models.Us
         "alumnos": alumnos_pendientes,
         "plazas": plazas_libres
     }
+
+@app.post("/ciclos/{ciclo_id}/asignar-profesor/{usuario_id}")
+def asignar_profe_a_ciclo(ciclo_id: int, usuario_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # Solo el admin puede hacer esto[cite: 10, 16]
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo el administrador puede asignar profesores")
+
+    ciclo = db.query(models.Ciclo).filter(models.Ciclo.id == ciclo_id).first()
+    profe = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.rol == "profesor").first()
+
+    if not ciclo or not profe:
+        raise HTTPException(status_code=404, detail="Ciclo o Profesor no encontrado")
+
+    # Realizamos la unión en la tabla intermedia
+    ciclo.profesores.append(profe)
+    db.commit()
+    return {"message": f"Profesor {profe.nombre} asignado al ciclo {ciclo.nombre}"}
+
+@app.put("/alumnos/me/contacto")
+def actualizar_mis_datos(datos: schemas.AlumnoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Buscamos la extensión de alumno del usuario actual[cite: 3, 4]
+    alumno = db.query(models.Alumno).filter(models.Alumno.usuario_id == current_user.id).first()
+    
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Perfil de alumno no encontrado")
+
+    # 2. Actualizar email (en la tabla Usuario) si se proporciona[cite: 3, 4]
+    if datos.email:
+        # Verificar si el email ya existe en otro usuario para evitar errores[cite: 3, 4]
+        email_exists = db.query(models.Usuario).filter(models.Usuario.email == datos.email).first()
+        if email_exists and email_exists.id != current_user.id:
+            raise HTTPException(status_code=400, detail="El email ya está en uso")
+        current_user.email = datos.email
+
+    # 3. Actualizar teléfono (en la tabla Alumno)[cite: 3, 4]
+    if datos.telefono:
+        alumno.telefono = datos.telefono
+
+    db.commit()
+    return {"message": "Datos de contacto actualizados correctamente"}
+
+@app.post("/configuracion/", response_model=schemas.ConfiguracionResponse)
+def definir_periodo(config: schemas.ConfiguracionBase, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # Solo el administrador puede configurar esto
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo el admin puede configurar periodos")
+    
+    # Borramos la anterior y creamos la nueva (para tener solo una configuración activa)
+    db.query(models.ConfiguracionGlobal).delete()
+    nueva_conf = models.ConfiguracionGlobal(**config.model_dump())
+    db.add(nueva_conf)
+    db.commit()
+    db.refresh(nueva_conf)
+    return nueva_conf

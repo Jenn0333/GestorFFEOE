@@ -5,12 +5,13 @@ from database import Base, engine, SessionLocal
 from security import create_access_token
 from sqlalchemy.orm import Session
 import models, security
+from datetime import datetime, timedelta, timezone
 
 client = TestClient(app)
 
 @pytest.fixture
 def db_session():
-    # Crea las tablas en cada test (si usas una BD de test separada)[cite: 3]
+    # Crea las tablas en cada test (si usas una BD de test separada)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
@@ -21,6 +22,13 @@ def db_session():
 
 @pytest.fixture
 def setup_data(db_session: Session):
+    # Creamos un periodo válido (desde ayer hasta mañana) para que el test pase la validación
+    config = models.ConfiguracionGlobal(
+        fecha_inicio=datetime.now(timezone.utc) - timedelta(days=1),
+        fecha_fin=datetime.now(timezone.utc) + timedelta(days=1)
+    )
+    db_session.add(config)
+
     # 1. Crear un Ciclo
     ciclo = models.Ciclo(nombre="DAW", anio_inicio=2024, anio_fin=2026)
     db_session.add(ciclo)
@@ -112,3 +120,24 @@ def test_importar_alumnos_sin_token_falla():
     """
     response = client.post("/alumnos/importar/")
     assert response.status_code == 401
+
+def test_alumno_no_puede_crear_ciclo(db_session):
+    # 1. CREAR EL USUARIO EN LA BD DE TEST
+    usuario_alumno = models.Usuario(
+        nombre="Alumno de Prueba",
+        email="alumno@test.com",
+        password_hash="...", # No importa el hash aquí para este test
+        rol="alumno"
+    )
+    db_session.add(usuario_alumno)
+    db_session.commit()
+
+    # 2. Generar el token para ese email que ya existe
+    token = create_access_token(data={"sub": "alumno@test.com", "rol": "alumno"})
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    payload = {"nombre": "Nuevo Ciclo", "anio_inicio": 2025, "anio_fin": 2027}
+    response = client.post("/ciclos/", json=payload, headers=headers)
+    
+    # 3. El sistema te reconoce (pasa el 401) pero te deniega por rol (da 403)
+    assert response.status_code == 403

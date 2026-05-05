@@ -1,7 +1,14 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, TIMESTAMP, CheckConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, TIMESTAMP, CheckConstraint, Table
 from sqlalchemy.orm import relationship
 from database import Base
 import datetime
+
+profesor_ciclo = Table(
+    "profesor_ciclo",
+    Base.metadata,
+    Column("usuario_id", Integer, ForeignKey("usuario.id"), primary_key=True),
+    Column("ciclo_id", Integer, ForeignKey("ciclo.id"), primary_key=True)
+)
 
 class Ciclo(Base):
     __tablename__ = "ciclo"
@@ -9,6 +16,7 @@ class Ciclo(Base):
     nombre = Column(String(100), nullable=False)
     anio_inicio = Column(Integer, nullable=False)
     anio_fin = Column(Integer, nullable=False)
+    profesores = relationship("Usuario", secondary=profesor_ciclo, back_populates="ciclos_gestionados")
 
 class Usuario(Base):
     __tablename__ = "usuario"
@@ -16,9 +24,9 @@ class Usuario(Base):
     nombre = Column(String(100), nullable=False)
     email = Column(String(150), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    rol = Column(String(20)) # Ahora aceptará: 'admin', 'profesor' o 'alumno'
-    # Relación opcional: solo si es alumno tendrá datos de alumno
+    rol = Column(String(20))
     datos_alumno = relationship("Alumno", back_populates="usuario_base", uselist=False)
+    ciclos_gestionados = relationship("Ciclo", secondary=profesor_ciclo, back_populates="profesores")
 
 class Empresa(Base):
     __tablename__ = "empresa"
@@ -37,6 +45,7 @@ class Alumno(Base):
     id = Column(Integer, primary_key=True, index=True)
     usuario_id = Column(Integer, ForeignKey("usuario.id"), unique=True)
     cv_url = Column(String(255))
+    telefono = Column(String(20))
     ciclo_id = Column(Integer, ForeignKey("ciclo.id"))
     estado_asignacion = Column(String(20), default="Pendiente")
     usuario_base = relationship("Usuario", back_populates="datos_alumno")
@@ -83,3 +92,10 @@ class SeguimientoContacto(Base):
     empresa_id = Column(Integer, ForeignKey("empresa.id"))
     fecha_hora = Column(TIMESTAMP, nullable=False, default=datetime.datetime.now)
     comentarios = Column(Text)
+
+class ConfiguracionGlobal(Base):
+    __tablename__ = "configuracion_global"
+    id = Column(Integer, primary_key=True, index=True)
+    nombre_periodo = Column(String(100), default="Prácticas FCT")
+    fecha_inicio = Column(TIMESTAMP, nullable=False)
+    fecha_fin = Column(TIMESTAMP, nullable=False)

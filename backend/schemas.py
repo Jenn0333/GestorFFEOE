@@ -46,6 +46,10 @@ class AlumnoResponse(BaseModel):
     # (Esto requiere usar 'from_attributes' y acceder a la relación en el modelo)
     model_config = {"from_attributes": True}
 
+class AlumnoUpdate(BaseModel):
+    telefono: Optional[str] = None
+    email: Optional[EmailStr] = None
+
 # --- ESQUEMAS DE TUTOR LABORAL ---
 class TutorLaboralBase(BaseModel):
     nombre: str
@@ -134,3 +138,11 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
     rol: Optional[str] = None
+
+class ConfiguracionBase(BaseModel):
+    fecha_inicio: datetime
+    fecha_fin: datetime
+
+class ConfiguracionResponse(ConfiguracionBase):
+    id: int
+    model_config = {"from_attributes": True}
