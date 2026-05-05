@@ -149,29 +149,25 @@ def login(form_data: schemas.UserLogin, db: Session = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/usuarios/")
-def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db)):
-    # Encriptamos la contraseña antes de guardarla
+def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     hashed_pwd = hash_password(usuario.password)
-    
     db_usuario = models.Usuario(
         nombre=usuario.nombre,
         email=usuario.email,
         rol=usuario.rol,
-        password_hash=hashed_pwd  # Guardamos el hash, no la clave real[cite: 4]
+        password_hash=hashed_pwd
     )
     db.add(db_usuario)
     db.commit()
     return {"message": "Usuario creado con éxito"}
 
 @app.post("/alumnos/importar/")
-async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)
-):
+async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
 
     # 1. Obtener todos los IDs de ciclos existentes para validar rápido
     ciclos_existentes = {c.id for c in db.query(models.Ciclo.id).all()}
-    
     reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
     alumnos_creados = 0
     errores = []
@@ -182,6 +178,12 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
             # Dentro del bucle de importación:
             c_id = int(row['ciclo_id'])
 
+            # VALIDACIÓN: Si el ciclo no existe, saltamos la fila y avisamos
+            if c_id not in ciclos_existentes:
+                errores.append(f"Fila {i+1}: El ciclo ID {c_id} no existe.")
+                continue
+
+            # Creación del usuario
             nuevo_usuario = models.Usuario(
                 nombre=row['nombre'],
                 email=row['email'],
@@ -191,6 +193,7 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
             db.add(nuevo_usuario)
             db.flush() # Esto asigna el ID a nuevo_usuario sin cerrar la transacción
 
+            # Creación del alumno
             nuevo_alumno = models.Alumno(
                 usuario_id=nuevo_usuario.id, # Vinculación correcta
                 ciclo_id=c_id
