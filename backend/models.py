@@ -74,6 +74,7 @@ class Asignacion(Base):
     plaza_id = Column(Integer, ForeignKey("plaza.id", ondelete="CASCADE"))
     tutor_laboral_id = Column(Integer, ForeignKey("tutor_laboral.id")) # Mejor que solo un String 
     fecha_asignacion = Column(TIMESTAMP, default=datetime.datetime.now)
+    alumno = relationship("Alumno", back_populates="asignacion")
 
 class SeguimientoContacto(Base):
     __tablename__ = "seguimiento_contactos"

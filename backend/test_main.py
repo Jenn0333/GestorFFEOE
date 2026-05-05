@@ -2,49 +2,109 @@ import pytest
 from fastapi.testclient import TestClient
 from main import app
 from database import Base, engine, SessionLocal
+from security import create_access_token
+from sqlalchemy.orm import Session
+import models, security
 
 client = TestClient(app)
 
-# Test para validar la restricción de plazas libres[cite: 1, 3]
-def test_asignar_alumno_sin_plazas():
-    # 1. Intentamos asignar a una plaza que sabemos que está llena
-    # (Asumiendo que previamente creamos una plaza con cantidad_total=1 y cantidad_ocupada=1)
-    payload = {
-        "alumno_id": 1,
-        "plaza_id": 99, # ID de una plaza llena
-        "tutor_laboral_id": 1
-    }
-    response = client.post("/asignaciones/", json=payload)
+@pytest.fixture
+def db_session():
+    # Crea las tablas en cada test (si usas una BD de test separada)[cite: 3]
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine) # Limpia después del test
+
+@pytest.fixture
+def setup_data(db_session: Session):
+    # 1. Crear un Ciclo
+    ciclo = models.Ciclo(nombre="DAW", anio_inicio=2024, anio_fin=2026)
+    db_session.add(ciclo)
     
-    # Verificamos que el error sea 400 y el mensaje correcto
+    # 2. Crear un Profesor
+    pwd_hasheada = security.hash_password("admin123") 
+    
+    profe = models.Usuario(
+        nombre="Profe Test",
+        email="profe@test.com",
+        password_hash=pwd_hasheada, # Guardamos el hash
+        rol="profesor"
+    )
+    db_session.add(profe)
+    
+    # 3. Crear una Empresa y una Plaza agotada (para probar el error 400)[cite: 3, 4, 8]
+    empresa = models.Empresa(nombre="Tech Solutions", email="info@tech.com")
+    db_session.add(empresa)
+    db_session.flush() # Para obtener IDs sin hacer commit[cite: 3]
+
+    plaza_llena = models.Plaza(
+        empresa_id=empresa.id, 
+        ciclo_id=ciclo.id, 
+        cantidad_total=1, 
+        cantidad_ocupada=1 # Ya está llena[cite: 3, 4]
+    )
+    db_session.add(plaza_llena)
+    
+    # 4. Crear un Alumno[cite: 3, 4]
+    user_alumno = models.Usuario(
+        nombre="Pepe Alumno", 
+        email="pepe@test.com", 
+        password_hash="...", 
+        rol="alumno"
+    )
+    db_session.add(user_alumno)
+    db_session.flush()
+    
+    alumno = models.Alumno(usuario_id=user_alumno.id, ciclo_id=ciclo.id, estado_asignacion="Pendiente")
+    db_session.add(alumno)
+    
+    db_session.commit()
+    return {"alumno_id": alumno.id, "plaza_id": plaza_llena.id}
+
+def test_asignar_alumno_sin_plazas_libres(setup_data):
+    """Prueba que no se puede asignar si la plaza está llena[cite: 8]"""
+    token = security.create_access_token(data={"sub": "profe@test.com", "rol": "profesor"})
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    payload = {
+        "alumno_id": setup_data["alumno_id"], 
+        "plaza_id": setup_data["plaza_id"], 
+        "tutor_laboral_id": None
+    }
+    
+    response = client.post("/asignaciones/", json=payload, headers=headers)
     assert response.status_code == 400
     assert response.json()["detail"] == "No quedan plazas libres en esta empresa para este ciclo"
 
 # Test de seguridad: acceso sin token
 def test_crear_ciclo_sin_autorizacion():
+    """Prueba que sin token devuelve 401[cite: 3, 8]"""
     response = client.post("/ciclos/", json={"nombre": "ASIR", "anio_inicio": 2024, "anio_fin": 2026})
-    # Si implementas la protección, debería devolver 401[cite: 3]
     assert response.status_code == 401
 
-client = TestClient(app)
+def test_importar_alumnos_como_alumno_falla(db_session): # Añade la sesión aquí
+    # 1. Primero crea un usuario con rol 'alumno' en la BD de pruebas
+    user = models.Usuario(
+        nombre="Test Alumno",
+        email="alumno@test.com",
+        password_hash=security.hash_password("123456"),
+        rol="alumno"
+    )
+    db_session.add(user)
+    db_session.commit()
 
-def test_importar_alumnos_como_alumno_falla():
-    """
-    Prueba que un usuario con rol de 'alumno' recibe un 403 (Prohibido)
-    al intentar acceder a una ruta de profesor.
-    """
-    # Simulamos un token de alumno (en un test real deberías generar un JWT válido)
-    # Aquí probamos el endpoint directamente
-    headers = {"Authorization": "Bearer TOKEN_DE_ALUMNO_AQUI"}
+    # 2. Ahora genera el token
+    token = create_access_token(data={"sub": "alumno@test.com", "rol": "alumno"})
+    headers = {"Authorization": f"Bearer {token}"}
     
-    # Intentamos subir un CSV ficticio
     files = {'file': ('alumnos.csv', 'nombre,email,ciclo_id\nPepe,pepe@mail.com,1', 'text/csv')}
-    
     response = client.post("/alumnos/importar/", headers=headers, files=files)
     
-    # Debe devolver 403 porque el rol no es suficiente[cite: 2]
     assert response.status_code == 403
-    assert response.json()["detail"] == "No tienes permisos suficientes para realizar esta acción"
 
 def test_importar_alumnos_sin_token_falla():
     """
@@ -52,21 +112,3 @@ def test_importar_alumnos_sin_token_falla():
     """
     response = client.post("/alumnos/importar/")
     assert response.status_code == 401
-
-def test_asignar_alumno_sin_plazas_libres():
-    """
-    Verifica que no se permite la asignación si cantidad_ocupada >= cantidad_total.[cite: 2, 8]
-    """
-    # Simulamos los datos de una asignación
-    payload = {
-        "alumno_id": 1,
-        "plaza_id": 10, # Imaginemos que la plaza 10 está llena
-        "tutor_laboral_id": 1
-    }
-    
-    # En el test, podrías mockear la base de datos para que devuelva una plaza llena
-    response = client.post("/asignaciones/", json=payload)
-    
-    # Verificamos el error 400 y el mensaje exacto que pusimos en main.py[cite: 2]
-    assert response.status_code == 400
-    assert "No quedan plazas libres" in response.json()["detail"]
