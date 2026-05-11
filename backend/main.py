@@ -358,7 +358,7 @@ def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db), curr
         "asignacion": detalles_asignacion
     }
 
-@app.get("/alumnos/me/dashboard")
+@app.get("/alumnos/me")
 def obtener_mi_dashboard(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # 1. Verificamos que el usuario logueado realmente tenga rol de alumno
     if current_user.rol != "alumno":
