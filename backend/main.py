@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -20,6 +21,15 @@ app = FastAPI(
     title="GestorFFEOE API",
     description="API para la gestión de prácticas FCT",
     version="1.0.0"
+)
+
+# Permitir que el Frontend se conecte
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"], # La URL de tu Frontend [cite: 74]
+    allow_credentials=True,
+    allow_methods=["*"], # Esto permite POST, OPTIONS, etc.
+    allow_headers=["*"],
 )
 
 # Crear la carpeta de archivos si no existe
@@ -73,7 +83,7 @@ def check_profesor_role(current_user: models.Usuario = Depends(get_current_user)
 def read_root():
     return {"message": "Bienvenido al GestorFFEOE API"}
 
-# --- RUTAS DE CICLOS ---
+# ========== RUTAS DE CICLOS ==========
 @app.post("/ciclos/", response_model=schemas.CicloResponse)
 def crear_ciclo(ciclo: schemas.CicloCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     db_ciclo = models.Ciclo(**ciclo.model_dump())
@@ -116,6 +126,24 @@ def borrar_ciclo(ciclo_id: int, db: Session = Depends(get_db), current_user: mod
     
     return {"message": f"Ciclo {db_ciclo.nombre} eliminado correctamente"}
 
+@app.post("/ciclos/{ciclo_id}/asignar-profesor/{usuario_id}")
+def asignar_profe_a_ciclo(ciclo_id: int, usuario_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # Solo el admin puede hacer esto[cite: 10, 16]
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo el administrador puede asignar profesores")
+
+    ciclo = db.query(models.Ciclo).filter(models.Ciclo.id == ciclo_id).first()
+    profe = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.rol == "profesor").first()
+
+    if not ciclo or not profe:
+        raise HTTPException(status_code=404, detail="Ciclo o Profesor no encontrado")
+
+    # Realizamos la unión en la tabla intermedia
+    ciclo.profesores.append(profe)
+    db.commit()
+    return {"message": f"Profesor {profe.nombre} asignado al ciclo {ciclo.nombre}"}
+
+# ========== RUTAS DE ASIGNACIONES ==========
 @app.post("/asignaciones/")
 def crear_asignacion(asignacion: schemas.AsignacionCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # Validación de fechas
@@ -162,7 +190,7 @@ def crear_asignacion(asignacion: schemas.AsignacionCreate, db: Session = Depends
     
     return {"message": f"Alumno {db_alumno.nombre} asignado correctamente"}
 
-# --- RUTAS DE SEGUIMIENTO ---
+# # ========== RUTAS DE SEGUIMIENTOS ==========
 @app.post("/seguimientos/", response_model=schemas.SeguimientoResponse)
 def registrar_seguimiento(seguimiento: schemas.SeguimientoCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # 1. Verificar que el profesor (usuario) existe y es realmente un profesor
@@ -184,15 +212,25 @@ def registrar_seguimiento(seguimiento: schemas.SeguimientoCreate, db: Session = 
     
     return nuevo_seguimiento
 
-@app.post("/token")
-def login(form_data: schemas.UserLogin, db: Session = Depends(get_db)):
-    user = db.query(models.Usuario).filter(models.Usuario.email == form_data.email).first()
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=400, detail="Email o contraseña incorrectos")
+# ========== RUTAS DE LOGIN ==========
+@app.post("/auth/login", response_model=schemas.Token)
+def login_for_access_token(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+    # 1. Buscar al usuario por email
+    user = db.query(models.Usuario).filter(models.Usuario.email == user_credentials.email).first()
     
+    # 2. Verificar si existe y la contraseña es correcta
+    if not user or not verify_password(user_credentials.password, user.password_hash):
+        raise HTTPException(
+            status_code=401,
+            detail="Email o contraseña incorrectos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 3. Crear el Token JWT
     access_token = create_access_token(data={"sub": user.email, "rol": user.rol})
     return {"access_token": access_token, "token_type": "bearer"}
 
+# ========== RUTAS DE USUARIOS ==========
 @app.post("/usuarios/")
 def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     hashed_pwd = hash_password(usuario.password)
@@ -206,6 +244,7 @@ def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db),
     db.commit()
     return {"message": "Usuario creado con éxito"}
 
+# ========== RUTAS DE ALUMNOS ==========
 @app.post("/alumnos/importar/")
 async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     if not file.filename.endswith('.csv'):
@@ -255,79 +294,6 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
         "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
         "errores": errores # Esto ayuda al profesor a saber qué filas fallaron
     }
-
-@app.post("/empresas/importar/")
-async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    # 1. Validar extensión
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
-
-    # 2. Leer CSV
-    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
-    
-    empresas_creadas = 0
-    for row in reader:
-        # 3. Crear instancia del modelo Empresa
-        nueva_empresa = models.Empresa(
-            nombre=row['nombre'],
-            direccion=row.get('direccion'),
-            web=row.get('web'),
-            persona_contacto=row.get('persona_contacto'),
-            email=row.get('email'),
-            telefono=row.get('telefono'),
-            responsable_legal_dni=row.get('responsable_legal_dni')
-        )
-        db.add(nueva_empresa)
-        empresas_creadas += 1
-    
-    db.commit()
-    return {"message": f"Se han importado {empresas_creadas} empresas correctamente"}
-
-@app.post("/plazas/", response_model=schemas.PlazaResponse)
-def crear_o_actualizar_plaza(plaza: schemas.PlazaCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    # 1. Verificar si ya existe una configuración de plazas para esa empresa y ciclo
-    db_plaza = db.query(models.Plaza).filter(
-        models.Plaza.empresa_id == plaza.empresa_id,
-        models.Plaza.ciclo_id == plaza.ciclo_id
-    ).first()
-
-    if db_plaza:
-        # Si existe, actualizamos el total
-        db_plaza.cantidad_total = plaza.cantidad_total
-    else:
-        # Si no existe, creamos el registro
-        db_plaza = models.Plaza(**plaza.model_dump())
-        db.add(db_plaza)
-    
-    db.commit()
-    db.refresh(db_plaza)
-    return db_plaza
-
-@app.get("/plazas/disponibles", response_model=List[schemas.PlazaResponse])
-def listar_plazas_disponibles(db: Session = Depends(get_db)):
-    # Filtramos las plazas donde la cantidad ocupada es menor a la total[cite: 3]
-    return db.query(models.Plaza).filter(models.Plaza.cantidad_ocupada < models.Plaza.cantidad_total).all()
-
-# --- RUTAS DE TUTORES LABORALES ---
-
-@app.post("/tutores/", response_model=schemas.TutorLaboralResponse)
-def crear_tutor(tutor: schemas.TutorLaboralCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    # Verificamos que la empresa existe antes de asignarle un tutor
-    empresa = db.query(models.Empresa).filter(models.Empresa.id == tutor.empresa_id).first()
-    if not empresa:
-        raise HTTPException(status_code=404, detail="La empresa no existe")
-    
-    nuevo_tutor = models.TutorLaboral(**tutor.model_dump())
-    db.add(nuevo_tutor)
-    db.commit()
-    db.refresh(nuevo_tutor)
-    return nuevo_tutor
-
-@app.get("/empresas/{empresa_id}/tutores", response_model=List[schemas.TutorLaboralResponse])
-def listar_tutores_empresa(empresa_id: int, db: Session = Depends(get_db)):
-    # Esto servirá para que el frontend rellene un desplegable al asignar
-    return db.query(models.TutorLaboral).filter(models.TutorLaboral.empresa_id == empresa_id).all()
-
 @app.post("/alumnos/{alumno_id}/upload-cv/")
 async def subir_cv(alumno_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     # 1. Validar que sea un PDF
@@ -408,33 +374,6 @@ def obtener_mi_dashboard(db: Session = Depends(get_db), current_user: models.Usu
     # Pasamos el ID del ALUMNO (de su tabla específica), no del usuario base
     return obtener_dashboard_alumno(alumno.id, db)
 
-@app.get("/tablero-asignacion")
-def obtener_datos_tablero(db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    alumnos_pendientes = db.query(models.Alumno).filter(models.Alumno.estado_asignacion == "Pendiente").all()
-    plazas_libres = db.query(models.Plaza).filter(models.Plaza.cantidad_ocupada < models.Plaza.cantidad_total).all()
-    
-    return {
-        "alumnos": alumnos_pendientes,
-        "plazas": plazas_libres
-    }
-
-@app.post("/ciclos/{ciclo_id}/asignar-profesor/{usuario_id}")
-def asignar_profe_a_ciclo(ciclo_id: int, usuario_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    # Solo el admin puede hacer esto[cite: 10, 16]
-    if current_user.rol != "admin":
-        raise HTTPException(status_code=403, detail="Solo el administrador puede asignar profesores")
-
-    ciclo = db.query(models.Ciclo).filter(models.Ciclo.id == ciclo_id).first()
-    profe = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.rol == "profesor").first()
-
-    if not ciclo or not profe:
-        raise HTTPException(status_code=404, detail="Ciclo o Profesor no encontrado")
-
-    # Realizamos la unión en la tabla intermedia
-    ciclo.profesores.append(profe)
-    db.commit()
-    return {"message": f"Profesor {profe.nombre} asignado al ciclo {ciclo.nombre}"}
-
 @app.put("/alumnos/me/contacto")
 def actualizar_mis_datos(datos: schemas.AlumnoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # 1. Buscamos la extensión de alumno del usuario actual[cite: 3, 4]
@@ -458,6 +397,91 @@ def actualizar_mis_datos(datos: schemas.AlumnoUpdate, db: Session = Depends(get_
     db.commit()
     return {"message": "Datos de contacto actualizados correctamente"}
 
+# ========== RUTAS DE EMPRESAS ==========
+@app.post("/empresas/importar/")
+async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    # 1. Validar extensión
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
+
+    # 2. Leer CSV
+    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
+    
+    empresas_creadas = 0
+    for row in reader:
+        # 3. Crear instancia del modelo Empresa
+        nueva_empresa = models.Empresa(
+            nombre=row['nombre'],
+            direccion=row.get('direccion'),
+            web=row.get('web'),
+            persona_contacto=row.get('persona_contacto'),
+            email=row.get('email'),
+            telefono=row.get('telefono'),
+            responsable_legal_dni=row.get('responsable_legal_dni')
+        )
+        db.add(nueva_empresa)
+        empresas_creadas += 1
+    
+    db.commit()
+    return {"message": f"Se han importado {empresas_creadas} empresas correctamente"}
+
+@app.get("/empresas/{empresa_id}/tutores", response_model=List[schemas.TutorLaboralResponse])
+def listar_tutores_empresa(empresa_id: int, db: Session = Depends(get_db)):
+    # Esto servirá para que el frontend rellene un desplegable al asignar
+    return db.query(models.TutorLaboral).filter(models.TutorLaboral.empresa_id == empresa_id).all()
+
+# ========== RUTAS DE PLAZAS ==========
+@app.post("/plazas/", response_model=schemas.PlazaResponse)
+def crear_o_actualizar_plaza(plaza: schemas.PlazaCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    # 1. Verificar si ya existe una configuración de plazas para esa empresa y ciclo
+    db_plaza = db.query(models.Plaza).filter(
+        models.Plaza.empresa_id == plaza.empresa_id,
+        models.Plaza.ciclo_id == plaza.ciclo_id
+    ).first()
+
+    if db_plaza:
+        # Si existe, actualizamos el total
+        db_plaza.cantidad_total = plaza.cantidad_total
+    else:
+        # Si no existe, creamos el registro
+        db_plaza = models.Plaza(**plaza.model_dump())
+        db.add(db_plaza)
+    
+    db.commit()
+    db.refresh(db_plaza)
+    return db_plaza
+
+@app.get("/plazas/disponibles", response_model=List[schemas.PlazaResponse])
+def listar_plazas_disponibles(db: Session = Depends(get_db)):
+    # Filtramos las plazas donde la cantidad ocupada es menor a la total[cite: 3]
+    return db.query(models.Plaza).filter(models.Plaza.cantidad_ocupada < models.Plaza.cantidad_total).all()
+
+# ========== RUTAS DE TUTORES ==========
+@app.post("/tutores/", response_model=schemas.TutorLaboralResponse)
+def crear_tutor(tutor: schemas.TutorLaboralCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    # Verificamos que la empresa existe antes de asignarle un tutor
+    empresa = db.query(models.Empresa).filter(models.Empresa.id == tutor.empresa_id).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="La empresa no existe")
+    
+    nuevo_tutor = models.TutorLaboral(**tutor.model_dump())
+    db.add(nuevo_tutor)
+    db.commit()
+    db.refresh(nuevo_tutor)
+    return nuevo_tutor
+
+# ========== RUTAS DE ASIGNACIONES ==========
+@app.get("/tablero-asignacion")
+def obtener_datos_tablero(db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    alumnos_pendientes = db.query(models.Alumno).filter(models.Alumno.estado_asignacion == "Pendiente").all()
+    plazas_libres = db.query(models.Plaza).filter(models.Plaza.cantidad_ocupada < models.Plaza.cantidad_total).all()
+    
+    return {
+        "alumnos": alumnos_pendientes,
+        "plazas": plazas_libres
+    }
+
+# ========== RUTAS DE CONFIGURACIÓN ==========
 @app.post("/configuracion/", response_model=schemas.ConfiguracionResponse)
 def definir_periodo(config: schemas.ConfiguracionBase, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # Solo el administrador puede configurar esto
