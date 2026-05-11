@@ -68,6 +68,7 @@ def check_profesor_role(current_user: models.Usuario = Depends(get_current_user)
         )
     return current_user
 
+
 @app.get("/")
 def read_root():
     return {"message": "Bienvenido al GestorFFEOE API"}
