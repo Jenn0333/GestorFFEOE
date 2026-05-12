@@ -56,7 +56,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # Decodificamos el token usando tu SECRET_KEY[cite: 6]
+        # Decodificamos el token usando tu SECRET_KEY
         payload = jwt.decode(token, security.SECRET_KEY, algorithms=[security.ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
@@ -70,7 +70,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 def check_profesor_role(current_user: models.Usuario = Depends(get_current_user)):
-    # Solo permitimos el paso si el rol es 'profesor' o 'admin'[cite: 3]
+    # Solo permitimos el paso si el rol es 'profesor' o 'admin'
     if current_user.rol not in ["profesor", "admin"]:
         raise HTTPException(
             status_code=403, 
@@ -396,6 +396,31 @@ def actualizar_mis_datos(datos: schemas.AlumnoUpdate, db: Session = Depends(get_
 
     db.commit()
     return {"message": "Datos de contacto actualizados correctamente"}
+
+# ========== RUTAS DE PROFESORES ==========
+@app.get("/profesores/me")
+def obtener_perfil_profesor(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Verificamos que realmente sea un profesor
+    if current_user.rol != "profesor":
+        raise HTTPException(status_code=403, detail="No tienes permisos de profesor")
+    
+    # 2. Devolvemos los datos del usuario (que es el profesor)
+    return current_user
+
+@app.get("/profesores/me/alumnos")
+def obtener_mis_alumnos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Seguridad: Solo los profesores pueden ver sus alumnos
+    if current_user.rol != "profesor":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+
+    # 2. Buscamos los IDs de los ciclos que tiene asignados este profesor
+    # Miramos en la tabla intermedia 'profesor_ciclo'
+    ciclos_ids = [ciclo.id for ciclo in current_user.ciclos_gestionados]
+    
+    # 3. Traemos todos los alumnos que pertenezcan a esos ciclos
+    alumnos = db.query(models.Alumno).filter(models.Alumno.ciclo_id.in_(ciclos_ids)).all()
+    
+    return alumnos
 
 # ========== RUTAS DE EMPRESAS ==========
 @app.post("/empresas/importar/")
