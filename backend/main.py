@@ -245,55 +245,6 @@ def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db),
     return {"message": "Usuario creado con éxito"}
 
 # ========== RUTAS DE ALUMNOS ==========
-@app.post("/alumnos/importar/")
-async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
-
-    # 1. Obtener todos los IDs de ciclos existentes para validar rápido
-    ciclos_existentes = {c.id for c in db.query(models.Ciclo.id).all()}
-    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
-    alumnos_creados = 0
-    errores = []
-
-    for i, row in enumerate(reader):
-        temp_password = hash_password("Cambiame123")
-        try:
-            # Dentro del bucle de importación:
-            c_id = int(row['ciclo_id'])
-
-            # VALIDACIÓN: Si el ciclo no existe, saltamos la fila y avisamos
-            if c_id not in ciclos_existentes:
-                errores.append(f"Fila {i+1}: El ciclo ID {c_id} no existe.")
-                continue
-
-            # Creación del usuario
-            nuevo_usuario = models.Usuario(
-                nombre=row['nombre'],
-                email=row['email'],
-                password_hash=temp_password,
-                rol="alumno"
-            )
-            db.add(nuevo_usuario)
-            db.flush() # Esto asigna el ID a nuevo_usuario sin cerrar la transacción
-
-            # Creación del alumno
-            nuevo_alumno = models.Alumno(
-                usuario_id=nuevo_usuario.id, # Vinculación correcta
-                ciclo_id=c_id
-            )
-            db.add(nuevo_alumno)
-            alumnos_creados += 1
-
-        except Exception as e:
-            errores.append(f"Fila {i+1}: Error inesperado - {str(e)}")
-
-    db.commit()
-    
-    return {
-        "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
-        "errores": errores # Esto ayuda al profesor a saber qué filas fallaron
-    }
 @app.post("/alumnos/{alumno_id}/upload-cv/")
 async def subir_cv(alumno_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
     # 1. Validar que sea un PDF
@@ -325,13 +276,12 @@ def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db), curr
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
 
     # 2. VALIDACIÓN DE SEGURIDAD
-    # Si el usuario NO es profesor/admin Y el ID del usuario no coincide con el del alumno...
-    if current_user.rol not in ["profesor", "admin"]:
-        if alumno.usuario_id != current_user.id:
-            raise HTTPException(
-                status_code=403, 
-                detail="Acceso denegado: No puedes ver el dashboard de otro alumno"
-            )
+    # Si el ID del usuario no coincide con el del alumno...
+    if alumno.usuario_id != current_user.id:
+        raise HTTPException(
+            status_code=403, 
+            detail="Acceso denegado: No puedes ver el dashboard de otro alumno"
+        )
 
     # 3. Lógica para montar el dashboard (esto ya lo tenías bien)
     asignacion = db.query(models.Asignacion).filter(models.Asignacion.alumno_id == alumno_id).first()
@@ -421,6 +371,56 @@ def obtener_mis_alumnos(db: Session = Depends(get_db), current_user: models.Usua
     alumnos = db.query(models.Alumno).filter(models.Alumno.ciclo_id.in_(ciclos_ids)).all()
     
     return alumnos
+
+@app.post("profesores/me/alumnos/importar/")
+async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
+
+    # 1. Obtener todos los IDs de ciclos existentes para validar rápido
+    ciclos_existentes = {c.id for c in db.query(models.Ciclo.id).all()}
+    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
+    alumnos_creados = 0
+    errores = []
+
+    for i, row in enumerate(reader):
+        temp_password = hash_password("Cambiame123")
+        try:
+            # Dentro del bucle de importación:
+            c_id = int(row['ciclo_id'])
+
+            # VALIDACIÓN: Si el ciclo no existe, saltamos la fila y avisamos
+            if c_id not in ciclos_existentes:
+                errores.append(f"Fila {i+1}: El ciclo ID {c_id} no existe.")
+                continue
+
+            # Creación del usuario
+            nuevo_usuario = models.Usuario(
+                nombre=row['nombre'],
+                email=row['email'],
+                password_hash=temp_password,
+                rol="alumno"
+            )
+            db.add(nuevo_usuario)
+            db.flush() # Esto asigna el ID a nuevo_usuario sin cerrar la transacción
+
+            # Creación del alumno
+            nuevo_alumno = models.Alumno(
+                usuario_id=nuevo_usuario.id, # Vinculación correcta
+                ciclo_id=c_id
+            )
+            db.add(nuevo_alumno)
+            alumnos_creados += 1
+
+        except Exception as e:
+            errores.append(f"Fila {i+1}: Error inesperado - {str(e)}")
+
+    db.commit()
+    
+    return {
+        "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
+        "errores": errores # Esto ayuda al profesor a saber qué filas fallaron
+    }
 
 # ========== RUTAS DE EMPRESAS ==========
 @app.post("/empresas/importar/")
