@@ -271,19 +271,12 @@ async def subir_cv(alumno_id: int, file: UploadFile = File(...), db: Session = D
 def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # 1. Buscar al alumno en la BD
     alumno = db.query(models.Alumno).filter(models.Alumno.id == alumno_id).first()
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == alumno.usuario_id).first()
     
     if not alumno:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
 
-    # 2. VALIDACIÓN DE SEGURIDAD
-    # Si el ID del usuario no coincide con el del alumno...
-    if alumno.usuario_id != current_user.id:
-        raise HTTPException(
-            status_code=403, 
-            detail="Acceso denegado: No puedes ver el dashboard de otro alumno"
-        )
-
-    # 3. Lógica para montar el dashboard (esto ya lo tenías bien)
+    # 2. Lógica para montar el dashboard
     asignacion = db.query(models.Asignacion).filter(models.Asignacion.alumno_id == alumno_id).first()
     
     detalles_asignacion = None
@@ -301,7 +294,7 @@ def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db), curr
 
     return {
         "perfil": {
-            "nombre": current_user.nombre if alumno.usuario_id == current_user.id else "Ver en Base de Datos",
+            "nombre": usuario.nombre,
             "estado": alumno.estado_asignacion,
             "cv_url": alumno.cv_url
         },
