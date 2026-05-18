@@ -13,6 +13,9 @@ export default function ProtectedRoute({ children, rolRequerido }) {
   // Sin token → al login
   if (!token) {
     return <Navigate to="/" replace />;
+    /* Configurar token */
+
+    /* Conectarse mediante API */
   }
 
   // Rol incorrecto → redirige a su dashboard
