@@ -283,10 +283,11 @@ const styles = {
     marginBottom: "1.5rem",
     gap: "4px",
   },
+  // 1. En styles.roleBtn cambia 'background' por 'backgroundColor'
   roleBtn: {
     flex: 1,
     border: "none",
-    background: "transparent",
+    backgroundColor: "transparent", // <--- Cambia esto
     borderRadius: "8px",
     padding: "8px 4px",
     fontSize: "0.82rem",
@@ -295,6 +296,8 @@ const styles = {
     cursor: "pointer",
     transition: "all 0.18s ease",
   },
+
+  // 2. En styles.roleBtnActive ya tienes 'backgroundColor', así que déjalo así
   roleBtnActive: {
     backgroundColor: "#fff",
     color: ACCENT_DARK,
