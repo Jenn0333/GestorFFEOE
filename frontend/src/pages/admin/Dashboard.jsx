@@ -143,7 +143,7 @@ function TabCiclos() {
   const handleEliminar = async (id) => {
     if (!window.confirm("¿Eliminar este ciclo?")) return;
     try {
-      const r = await apiFetch(`/admin/ciclos/${id}`, { method: "DELETE" });
+      const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
       if (r.ok) setCiclos((prev) => prev.filter((c) => c.id !== id));
     } catch {}
   };
@@ -216,40 +216,41 @@ function TabCiclos() {
           </p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {ciclos.map((c) => (
-              <div key={c.id} style={styles.listaItem}>
-                <div
-                  style={{
-                    ...styles.inicialesCirculo,
-                    background: "#E6F1FB",
-                    color: "#0C447C",
-                    borderRadius: "8px",
-                  }}
-                >
-                  {c.nombre?.slice(0, 3).toUpperCase()}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p
+            {Array.isArray(ciclos) &&
+              ciclos.map((c) => (
+                <div key={c.id} style={styles.listaItem}>
+                  <div
                     style={{
-                      fontWeight: "600",
-                      fontSize: "0.88rem",
-                      color: C.text,
+                      ...styles.inicialesCirculo,
+                      background: "#E6F1FB",
+                      color: "#0C447C",
+                      borderRadius: "8px",
                     }}
                   >
-                    {c.nombre}
-                  </p>
-                  <p style={{ fontSize: "0.76rem", color: C.muted }}>
-                    {c.anno_inicio} – {c.anno_fin}
-                  </p>
+                    {c.nombre?.slice(0, 3).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p
+                      style={{
+                        fontWeight: "600",
+                        fontSize: "0.88rem",
+                        color: C.text,
+                      }}
+                    >
+                      {c.nombre}
+                    </p>
+                    <p style={{ fontSize: "0.76rem", color: C.muted }}>
+                      {c.anno_inicio} – {c.anno_fin}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleEliminar(c.id)}
+                    style={styles.btnDanger}
+                  >
+                    Eliminar
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleEliminar(c.id)}
-                  style={styles.btnDanger}
-                >
-                  Eliminar
-                </button>
-              </div>
-            ))}
+              ))}
           </div>
         )}
       </Card>
@@ -274,7 +275,7 @@ function TabProfesores() {
   useEffect(() => {
     Promise.all([
       apiFetch("/admin/profesores").then((r) => r.json()),
-      apiFetch("/admin/ciclos").then((r) => r.json()),
+      apiFetch("/ciclos").then((r) => r.json()),
     ])
       .then(([p, c]) => {
         setProfesores(p);
@@ -373,11 +374,12 @@ function TabProfesores() {
               required
             >
               <option value="">Selecciona un ciclo...</option>
-              {ciclos.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre} ({c.anno_inicio}–{c.anno_fin})
-                </option>
-              ))}
+              {Array.isArray(ciclos) &&
+                ciclos.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
+                  </option>
+                ))}
             </select>
           </div>
           <button type="submit" disabled={guardando} style={styles.btnPrimario}>

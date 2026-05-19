@@ -26,7 +26,6 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // Usamos la variable de entorno y evitamos la doble barra //
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/auth/login`,
         {
@@ -34,33 +33,36 @@ export default function Login() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            username: email, // O 'email', dependiendo de cómo lo espere tu FastAPI
-            password: password,
-            role: role,
-          }),
+          // CORRECCIÓN 1: Enviamos el objeto correcto
+          body: JSON.stringify({ email, password }),
         },
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.detail || "Credenciales incorrectas.");
+        // CORRECCIÓN 2: Validamos que el error sea un texto
+        // Si es el error 422, FastAPI manda un array en 'detail',
+        // por eso mejor ponemos un mensaje genérico o extraemos el texto.
+        const errorMsg =
+          typeof data.detail === "string"
+            ? data.detail
+            : "Error en los datos enviados o credenciales incorrectas.";
+
+        setError(errorMsg);
         return;
       }
 
-      // Guardar JWT en localStorage
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("role", role);
 
-      // Redirigir según rol
       const routes = {
         admin: "/admin",
         profesor: "/profesor",
         alumno: "/alumno",
       };
       window.location.href = routes[role];
-    } catch {
+    } catch (err) {
       setError("No se pudo conectar con el servidor.");
     } finally {
       setLoading(false);
