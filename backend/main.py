@@ -415,6 +415,24 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
         "errores": errores # Esto ayuda al profesor a saber qué filas fallaron
     }
 
+@app.get("/profesores/me/empresas", response_model=List[schemas.EmpresaResponse])
+def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Seguridad: Solo profesores
+    if current_user.rol != "profesor":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+
+    # 2. Lógica: Obtener empresas que tienen plazas para los ciclos del profesor
+    ciclos_ids = [ciclo.id for ciclo in current_user.ciclos_gestionados]
+    
+    # Buscamos empresas haciendo un join con la tabla Plaza para filtrar por sus ciclos
+    empresas = db.query(models.Empresa)\
+        .join(models.Plaza)\
+        .filter(models.Plaza.ciclo_id.in_(ciclos_ids))\
+        .distinct()\
+        .all()
+    
+    return empresas
+
 # ========== RUTAS DE EMPRESAS ==========
 @app.post("/empresas/importar/")
 async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
