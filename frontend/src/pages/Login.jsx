@@ -34,7 +34,11 @@ export default function Login() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(tuDataDeLogin),
+          body: JSON.stringify({
+            username: email, // O 'email', dependiendo de cómo lo espere tu FastAPI
+            password: password,
+            role: role,
+          }),
         },
       );
 
