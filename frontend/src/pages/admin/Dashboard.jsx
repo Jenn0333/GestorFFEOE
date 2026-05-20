@@ -179,9 +179,9 @@ function TabCiclos() {
               <input
                 type="number"
                 placeholder="2025"
-                value={form.anno_inicio}
+                value={form.anio_inicio}
                 onChange={(e) =>
-                  setForm({ ...form, anno_inicio: e.target.value })
+                  setForm({ ...form, anio_inicio: e.target.value })
                 }
                 style={{ ...styles.input, marginTop: "4px" }}
                 required
@@ -192,8 +192,8 @@ function TabCiclos() {
               <input
                 type="number"
                 placeholder="2026"
-                value={form.anno_fin}
-                onChange={(e) => setForm({ ...form, anno_fin: e.target.value })}
+                value={form.anio_fin}
+                onChange={(e) => setForm({ ...form, anio_fin: e.target.value })}
                 style={{ ...styles.input, marginTop: "4px" }}
                 required
               />

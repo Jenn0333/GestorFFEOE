@@ -438,6 +438,13 @@ def listar_ciclos_admin(db: Session = Depends(get_db), current_user: models.Usua
 def crear_ciclo_admin(ciclo: schemas.CicloCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     if current_user.rol != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado")
+    
+    # Comprobar si ya existe un ciclo con el mismo nombre
+    db_ciclo_existente = db.query(models.Ciclo).filter(models.Ciclo.nombre == ciclo.nombre).first()
+    if db_ciclo_existente:
+        raise HTTPException(status_code=400, detail="El ciclo ya existe")
+
+    # Mapeo directo y limpio a las columnas de la Base de Datos
     db_ciclo = models.Ciclo(
         nombre=ciclo.nombre,
         anio_inicio=ciclo.anio_inicio,
@@ -469,6 +476,31 @@ def listar_profesores(db: Session = Depends(get_db), current_user: models.Usuari
         raise HTTPException(status_code=403, detail="Acceso denegado")
     # Retorna los usuarios que tengan rol de profesor
     return db.query(models.Usuario).filter(models.Usuario.rol == "profesor").all()
+
+@app.post("/admin/profesores", response_model=schemas.UsuarioResponse)
+def crear_profesor_admin(profesor: schemas.UsuarioCreate,db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Validar que quien hace la petición sea Administrador
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    
+    # 2. Comprobar si el email ya está registrado en el sistema
+    email_existente = db.query(models.Usuario).filter(models.Usuario.email == profesor.email).first()
+    if email_existente:
+        raise HTTPException(status_code=400, detail="El email ya está registrado")
+    
+    # 3. Crear el nuevo objeto Usuario forzando el rol de "profesor"
+    nuevo_profe = models.Usuario(
+        nombre=profesor.nombre,
+        email=profesor.email,
+        password_hash=hash_password(profesor.password), # Hasheamos la contraseña de forma segura
+        rol="profesor" # Forzamos que sea profesor obligatoriamente
+    )
+    
+    db.add(nuevo_profe)
+    db.commit()
+    db.refresh(nuevo_profe)
+    
+    return nuevo_profe
 
 @app.get("/admin/configuracion")
 def obtener_configuracion(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
