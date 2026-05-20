@@ -25,15 +25,13 @@ usuario = models.Usuario(
     rol="alumno"
 )
 ciclo = models.Ciclo(
-    id = 1,
     nombre = "DAM",
     anio_inicio = 2025,
     anio_fin = 2027
 )
 alumno = models.Alumno(
-    id = 1,
     usuario_id = 3,
-    ciclo_id = 1
+    ciclo_id = 2
 )
 db.add(admin)
 db.add(profe)

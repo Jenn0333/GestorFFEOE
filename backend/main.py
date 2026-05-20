@@ -238,27 +238,28 @@ def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db),
     return {"message": "Usuario creado con éxito"}
 
 # ========== RUTAS DE ALUMNOS ==========
-@app.post("/alumnos/{alumno_id}/upload-cv/")
-async def subir_cv(alumno_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    # 1. Validar que sea un PDF
-    if file.content_type != "application/pdf":
+@app.post("/alumnos/me/cv")
+def subir_cv(cv: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # Validar que sea un PDF usando la nueva variable 'cv'
+    if not cv.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF")
-
-    # 2. Buscar al alumno en la BD
-    db_alumno = db.query(models.Alumno).filter(models.Alumno.id == alumno_id).first()
+    
+    db_alumno = db.query(models.Alumno).filter(models.Alumno.usuario_id == current_user.id).first()
     if not db_alumno:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
-
-    # 3. Guardar el archivo físicamente
-    file_path = f"uploads/cv_{alumno_id}.pdf"
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
-
-    # 4. Guardar la URL en la base de datos[cite: 3]
-    db_alumno.cv_url = f"/static/cv_{alumno_id}.pdf"
+        
+    # Guardar el archivo físicamente en el servidor
+    nombre_archivo = f"cv_{current_user.id}_{cv.filename}"
+    ruta_archivo = os.path.join("uploads", nombre_archivo)
+    
+    with open(ruta_archivo, "wb") as buffer:
+        buffer.write(cv.file.read())  # <-- Cambiado a 'cv.file'
+        
+    # Actualizar la URL en la base de datos
+    db_alumno.cv_url = f"/static/{nombre_archivo}"
     db.commit()
-
-    return {"message": "CV subido con éxito", "url": db_alumno.cv_url}
+    
+    return {"cv_url": db_alumno.cv_url, "message": "CV subido con éxito"}
 
 @app.get("/alumnos/{alumno_id}/dashboard")
 def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -310,7 +311,7 @@ def obtener_mi_dashboard(db: Session = Depends(get_db), current_user: models.Usu
     # Pasamos el ID del ALUMNO (de su tabla específica), no del usuario base
     return obtener_dashboard_alumno(alumno.id, db)
 
-@app.put("/alumnos/me/contacto")
+@app.patch("/alumnos/me/contacto")
 def actualizar_mis_datos(datos: schemas.AlumnoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # 1. Buscamos la extensión de alumno del usuario actual[cite: 3, 4]
     alumno = db.query(models.Alumno).filter(models.Alumno.usuario_id == current_user.id).first()
@@ -439,7 +440,7 @@ def crear_ciclo_admin(ciclo: schemas.CicloCreate, db: Session = Depends(get_db),
         raise HTTPException(status_code=403, detail="Acceso denegado")
     db_ciclo = models.Ciclo(
         nombre=ciclo.nombre,
-        anio_inicio=ciclo.anio_inicio,  # Ojo: verifica si el front envía 'anno_inicio' o 'anio_inicio'
+        anio_inicio=ciclo.anio_inicio,
         anio_fin=ciclo.anio_fin
     )
     db.add(db_ciclo)
