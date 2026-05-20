@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API = import.meta.env.VITE_API_URL;
+const API = "http://localhost:8000";
 
 // Obtiene el token guardado al hacer login
 const getToken = () => localStorage.getItem("token");
