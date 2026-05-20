@@ -84,13 +84,6 @@ def read_root():
     return {"message": "Bienvenido al GestorFFEOE API"}
 
 # ========== RUTAS DE CICLOS ==========
-@app.post("/ciclos/", response_model=schemas.CicloResponse)
-def crear_ciclo(ciclo: schemas.CicloCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    db_ciclo = models.Ciclo(**ciclo.model_dump())
-    db.add(db_ciclo)
-    db.commit()
-    db.refresh(db_ciclo)
-    return db_ciclo
 
 @app.get("/ciclos/", response_model=List[schemas.CicloResponse])
 def listar_ciclos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
@@ -432,6 +425,74 @@ def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usu
         .all()
     
     return empresas
+
+# ========== RUTAS DE ADMINS ==========
+@app.get("/admin/ciclos", response_model=List[schemas.CicloResponse])
+def listar_ciclos_admin(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    return db.query(models.Ciclo).all()
+
+@app.post("/admin/ciclos", response_model=schemas.CicloResponse)
+def crear_ciclo_admin(ciclo: schemas.CicloCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    db_ciclo = models.Ciclo(
+        nombre=ciclo.nombre,
+        anio_inicio=ciclo.anio_inicio,  # Ojo: verifica si el front envía 'anno_inicio' o 'anio_inicio'
+        anio_fin=ciclo.anio_fin
+    )
+    db.add(db_ciclo)
+    db.commit()
+    db.refresh(db_ciclo)
+    return db_ciclo
+
+@app.get("/admin/stats")
+def obtener_estadisticas_admin(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    
+    total_ciclos = db.query(models.Ciclo).count()
+    total_profesores = db.query(models.Usuario).filter(models.Usuario.rol == "profesor").count()
+    total_alumnos = db.query(models.Usuario).filter(models.Usuario.rol == "alumno").count()
+    
+    return {
+        "total_ciclos": total_ciclos,
+        "total_profesores": total_profesores,
+        "total_alumnos": total_alumnos
+    }
+
+@app.get("/admin/profesores")
+def listar_profesores(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    # Retorna los usuarios que tengan rol de profesor
+    return db.query(models.Usuario).filter(models.Usuario.rol == "profesor").all()
+
+@app.get("/admin/configuracion")
+def obtener_configuracion(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    config = db.query(models.ConfiguracionGlobal).first()
+    if not config:
+        return {"fecha_inicio": None, "fecha_fin": None, "descripcion": ""}
+    return config
+
+@app.put("/admin/configuracion")
+def guardar_configuracion(config_in: schemas.ConfiguracionBase, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo el admin puede configurar periodos")
+    
+    db_config = db.query(models.ConfiguracionGlobal).first()
+    if not db_config:
+        db_config = models.ConfiguracionGlobal(**config_in.model_dump())
+        db.add(db_config)
+    else:
+        db_config.fecha_inicio = config_in.fecha_inicio
+        db_config.fecha_fin = config_in.fecha_fin
+    
+    db.commit()
+    return {"message": "Configuración actualizada con éxito"}
 
 # ========== RUTAS DE EMPRESAS ==========
 @app.post("/empresas/importar/")
