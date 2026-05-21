@@ -143,7 +143,7 @@ function TabCiclos() {
   // 1. CAMBIO AQUÍ: Función handleEliminar actualizada
   const handleEliminar = async (id) => {
     if (!window.confirm("¿Eliminar este ciclo?")) return;
-    setMsg(""); 
+    setMsg("");
     try {
       const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
       if (r.ok) {
@@ -163,7 +163,10 @@ function TabCiclos() {
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       {/* Formulario nuevo ciclo */}
       <Card title="Crear nuevo ciclo formativo">
-        <form onSubmit={handleCrear} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+        <form
+          onSubmit={handleCrear}
+          style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
+        >
           {/* ... tus inputs ... */}
           <button type="submit" disabled={guardando} style={styles.btnPrimario}>
             {guardando ? "Creando..." : "Crear ciclo"}
@@ -181,14 +184,17 @@ function TabCiclos() {
             {ciclos.map((c) => (
               <div key={c.id} style={styles.listaItem}>
                 {/* ... info del ciclo ... */}
-                <button onClick={() => handleEliminar(c.id)} style={styles.btnDanger}>
+                <button
+                  onClick={() => handleEliminar(c.id)}
+                  style={styles.btnDanger}
+                >
                   Eliminar
                 </button>
               </div>
             ))}
           </div>
         )}
-        
+
         {/* 2. CAMBIO AQUÍ: Ponemos el mensaje también al final de la lista */}
         <div style={{ marginTop: "1rem" }}>
           <MensajeFeedback msg={msg} />
@@ -198,136 +204,135 @@ function TabCiclos() {
   );
 }
 
-  const handleEliminar = async (id) => {
-    if (!window.confirm("¿Eliminar este ciclo?")) return;
-    setMsg(""); // Limpiamos mensajes previos
+const handleEliminar = async (id) => {
+  if (!window.confirm("¿Eliminar este ciclo?")) return;
+  setMsg(""); // Limpiamos mensajes previos
 
-    try {
-      const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
+  try {
+    const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
 
-      if (r.ok) {
-        // Si sale bien, filtramos la lista y mostramos éxito
-        setCiclos((prev) => prev.filter((c) => c.id !== id));
-        setMsg("!Ciclo eliminado correctamente.");
-      } else {
-        // AQUÍ capturamos el error 400 que enviamos desde el backend
-        const data = await r.json();
-        setMsg(data.detail || "Error al eliminar el ciclo.");
-      }
-    } catch (error) {
-      setMsg("No se pudo conectar con el servidor.");
+    if (r.ok) {
+      // Si sale bien, filtramos la lista y mostramos éxito
+      setCiclos((prev) => prev.filter((c) => c.id !== id));
+      setMsg("!Ciclo eliminado correctamente.");
+    } else {
+      // AQUÍ capturamos el error 400 que enviamos desde el backend
+      const data = await r.json();
+      setMsg(data.detail || "Error al eliminar el ciclo.");
     }
-  };
+  } catch (error) {
+    setMsg("No se pudo conectar con el servidor.");
+  }
+};
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {/* Formulario nuevo ciclo */}
-      <Card title="Crear nuevo ciclo formativo">
-        <form
-          onSubmit={handleCrear}
-          style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
+return (
+  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    {/* Formulario nuevo ciclo */}
+    <Card title="Crear nuevo ciclo formativo">
+      <form
+        onSubmit={handleCrear}
+        style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
+      >
+        <div>
+          <label style={styles.label}>Nombre del ciclo</label>
+          <input
+            type="text"
+            placeholder="Ej: Desarrollo de Aplicaciones Web"
+            value={form.nombre}
+            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+            style={{ ...styles.input, marginTop: "4px" }}
+            required
+          />
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "0.8rem",
+          }}
         >
           <div>
-            <label style={styles.label}>Nombre del ciclo</label>
+            <label style={styles.label}>Año inicio</label>
             <input
-              type="text"
-              placeholder="Ej: Desarrollo de Aplicaciones Web"
-              value={form.nombre}
-              onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+              type="number"
+              placeholder="2025"
+              value={form.anio_inicio}
+              onChange={(e) =>
+                setForm({ ...form, anio_inicio: e.target.value })
+              }
               style={{ ...styles.input, marginTop: "4px" }}
               required
             />
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "0.8rem",
-            }}
-          >
-            <div>
-              <label style={styles.label}>Año inicio</label>
-              <input
-                type="number"
-                placeholder="2025"
-                value={form.anio_inicio}
-                onChange={(e) =>
-                  setForm({ ...form, anio_inicio: e.target.value })
-                }
-                style={{ ...styles.input, marginTop: "4px" }}
-                required
-              />
-            </div>
-            <div>
-              <label style={styles.label}>Año fin</label>
-              <input
-                type="number"
-                placeholder="2026"
-                value={form.anio_fin}
-                onChange={(e) => setForm({ ...form, anio_fin: e.target.value })}
-                style={{ ...styles.input, marginTop: "4px" }}
-                required
-              />
-            </div>
+          <div>
+            <label style={styles.label}>Año fin</label>
+            <input
+              type="number"
+              placeholder="2026"
+              value={form.anio_fin}
+              onChange={(e) => setForm({ ...form, anio_fin: e.target.value })}
+              style={{ ...styles.input, marginTop: "4px" }}
+              required
+            />
           </div>
-          <button type="submit" disabled={guardando} style={styles.btnPrimario}>
-            {guardando ? "Creando..." : "Crear ciclo"}
-          </button>
-          <MensajeFeedback msg={msg} />
-        </form>
-      </Card>
+        </div>
+        <button type="submit" disabled={guardando} style={styles.btnPrimario}>
+          {guardando ? "Creando..." : "Crear ciclo"}
+        </button>
+        <MensajeFeedback msg={msg} />
+      </form>
+    </Card>
 
-      {/* Lista de ciclos */}
-      <Card title={`Ciclos existentes (${ciclos.length})`}>
-        {loading ? (
-          <p style={{ color: C.muted, fontSize: "0.85rem" }}>Cargando...</p>
-        ) : ciclos.length === 0 ? (
-          <p style={{ color: C.muted, fontSize: "0.85rem" }}>
-            No hay ciclos creados todavía.
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {Array.isArray(ciclos) &&
-              ciclos.map((c) => (
-                <div key={c.id} style={styles.listaItem}>
-                  <div
+    {/* Lista de ciclos */}
+    <Card title={`Ciclos existentes (${ciclos.length})`}>
+      {loading ? (
+        <p style={{ color: C.muted, fontSize: "0.85rem" }}>Cargando...</p>
+      ) : ciclos.length === 0 ? (
+        <p style={{ color: C.muted, fontSize: "0.85rem" }}>
+          No hay ciclos creados todavía.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {Array.isArray(ciclos) &&
+            ciclos.map((c) => (
+              <div key={c.id} style={styles.listaItem}>
+                <div
+                  style={{
+                    ...styles.inicialesCirculo,
+                    background: "#E6F1FB",
+                    color: "#0C447C",
+                    borderRadius: "8px",
+                  }}
+                >
+                  {c.nombre?.slice(0, 3).toUpperCase()}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p
                     style={{
-                      ...styles.inicialesCirculo,
-                      background: "#E6F1FB",
-                      color: "#0C447C",
-                      borderRadius: "8px",
+                      fontWeight: "600",
+                      fontSize: "0.88rem",
+                      color: C.text,
                     }}
                   >
-                    {c.nombre?.slice(0, 3).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <p
-                      style={{
-                        fontWeight: "600",
-                        fontSize: "0.88rem",
-                        color: C.text,
-                      }}
-                    >
-                      {c.nombre}
-                    </p>
-                    <p style={{ fontSize: "0.76rem", color: C.muted }}>
-                      {c.anno_inicio} – {c.anno_fin}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleEliminar(c.id)}
-                    style={styles.btnDanger}
-                  >
-                    Eliminar
-                  </button>
+                    {c.nombre}
+                  </p>
+                  <p style={{ fontSize: "0.76rem", color: C.muted }}>
+                    {c.anno_inicio} – {c.anno_fin}
+                  </p>
                 </div>
-              ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
+                <button
+                  onClick={() => handleEliminar(c.id)}
+                  style={styles.btnDanger}
+                >
+                  Eliminar
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
+    </Card>
+  </div>
+);
 
 // ── Pestaña Profesores ────────────────────────────────────────────────────────
 function TabProfesores() {
