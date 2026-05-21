@@ -30,20 +30,20 @@ async def preflight_handler(rest_of_path: str, request: Request):
     return Response(
         status_code=200,
         headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Origin": "https://adventurous-joy-production-20dc.up.railway.app",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type",
+            "Access-Control-Allow-Credentials": "true",
         }
     )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["https://adventurous-joy-production-20dc.up.railway.app", "http://localhost:5173"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # Crear la carpeta de archivos si no existe
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
