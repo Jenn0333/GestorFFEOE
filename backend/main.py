@@ -23,31 +23,29 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS PRIMERO - antes de todo
-from fastapi.middleware.cors import CORSMiddleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://adventurous-joy-production-20dc.up.railway.app", "http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+from starlette.middleware.base import BaseHTTPMiddleware
 
-# Luego el handler de OPTIONS
-from fastapi import Request
-from fastapi.responses import Response
+class CORSManualMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.method == "OPTIONS":
+            from starlette.responses import Response
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": "https://adventurous-joy-production-20dc.up.railway.app",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+                    "Access-Control-Allow-Credentials": "true",
+                }
+            )
+        response = await call_next(request)
+        response.headers["Access-Control-Allow-Origin"] = "https://adventurous-joy-production-20dc.up.railway.app"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
+        return response
 
-@app.options("/{rest_of_path:path}")
-async def preflight_handler(rest_of_path: str, request: Request):
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "https://adventurous-joy-production-20dc.up.railway.app",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "Authorization, Content-Type",
-            "Access-Control-Allow-Credentials": "true",
-        }
-    )
+app.add_middleware(CORSManualMiddleware)
 
 # Crear la carpeta de archivos si no existe
 if not os.path.exists("uploads"):
