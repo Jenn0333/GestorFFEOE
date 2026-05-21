@@ -352,16 +352,18 @@ def obtener_perfil_profesor(db: Session = Depends(get_db), current_user: models.
     # 2. Devolvemos los datos del usuario (que es el profesor)
     return current_user
 
-@app.get("/profesores/me/alumnos", response_model=List[schemas.AlumnoResponse])
-def obtener_mis_alumnos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    """
-    Devuelve los alumnos que pertenecen a los ciclos gestionados por el profesor autenticado
-    """
-    # 1. Conseguimos los IDs de los ciclos que gestiona este profesor
+@app.get("/profesores/me/alumnos")
+def obtener_mis_alumnos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Seguridad: Solo los profesores pueden ver sus alumnos
+    if current_user.rol != "profesor":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+
+    # 2. Buscamos los IDs de los ciclos que tiene asignados este profesor
+    # Miramos en la tabla intermedia 'profesor_ciclo'
     ciclos_ids = [ciclo.id for ciclo in current_user.ciclos_gestionados]
     
-    # 2. Filtramos los alumnos cuyo ciclo_id esté en esa lista
-    alumnos = db.query(models.Alumno).filter(models.Alumno.cycle_id.in_(ciclos_ids)).all()
+    # 3. Traemos todos los alumnos que pertenezcan a esos ciclos
+    alumnos = db.query(models.Alumno).filter(models.Alumno.ciclo_id.in_(ciclos_ids)).all()
     
     return alumnos
 
