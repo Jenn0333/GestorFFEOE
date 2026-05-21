@@ -373,9 +373,24 @@ function TabProfesores() {
               <p style={{ fontSize: "0.76rem", color: C.muted }}>{p.email}</p>
             </div>
             <span style={styles.tag}>
-              {ciclos.find((c) => c.id === p.ciclo_id)?.nombre ||
-                p.ciclo?.nombre ||
-                "Sin ciclo"}
+              {(() => {
+                // 1. Intentamos buscar el ciclo en la lista local usando el ID del profesor
+                const cicloEncontrado = ciclos.find(
+                  (c) => Number(c.id) === Number(p.ciclo_id),
+                );
+
+                if (cicloEncontrado) {
+                  return cicloEncontrado.nombre;
+                }
+
+                // 2. Si no lo encontramos por ID, vemos si el objeto profesor ya trae el ciclo dentro
+                if (p.ciclo && p.ciclo.nombre) {
+                  return p.ciclo.nombre;
+                }
+
+                // 3. Por último, si nada de lo anterior funciona
+                return "Sin ciclo";
+              })()}
             </span>
           </div>
         ))}
