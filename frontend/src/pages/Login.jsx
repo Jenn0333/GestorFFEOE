@@ -49,15 +49,18 @@ export default function Login() {
         return;
       }
 
+      const tokenPayload = JSON.parse(atob(data.access_token.split(".")[1]));
+      const rolReal = tokenPayload.rol;
+
       localStorage.setItem("token", data.access_token);
-      localStorage.setItem("role", role);
+      localStorage.setItem("role", rolReal);
 
       const routes = {
         admin: "/admin",
         profesor: "/profesor",
         alumno: "/alumno",
       };
-      window.location.href = routes[role];
+      window.location.href = routes[rolReal];
     } catch (err) {
       setError("No se pudo conectar con el servidor.");
     } finally {

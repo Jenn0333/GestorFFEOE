@@ -142,7 +142,8 @@ function TabAlumnos() {
           .then((r) => r.json())
           .then(setAlumnos);
       } else {
-        setCsvMsg("Error al importar el CSV. Comprueba el formato.");
+        const errorData = await r.json();
+        setCsvMsg(`Error: ${JSON.stringify(errorData)}`);
       }
     } catch {
       setCsvMsg("No se pudo conectar con el servidor.");
