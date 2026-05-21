@@ -22,6 +22,19 @@ app = FastAPI(
     description="API para la gestión de prácticas FCT",
     version="1.0.0"
 )
+from fastapi import Request
+from fastapi.responses import Response
+
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(rest_of_path: str, request: Request):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 app.add_middleware(
     CORSMiddleware,
