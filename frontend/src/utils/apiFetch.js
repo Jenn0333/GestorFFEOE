@@ -1,4 +1,4 @@
-const API = "http://localhost:8000";
+const API = "https://gestorffeoe-production.up.railway.app";
 
 export async function apiFetch(path, options = {}) {
   const token = localStorage.getItem("token");
