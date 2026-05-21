@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const API = "http://localhost:8000";
+const API = "https://gestorffeoe-production.up.railway.app";
 
 // Obtiene el token guardado al hacer login
 const getToken = () => localStorage.getItem("token");
