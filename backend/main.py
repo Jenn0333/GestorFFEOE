@@ -28,8 +28,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://10.13.0.69:5173",
-        "http://10.13.0.73:5173"
+        "adventurous-joy-production-20dc.up.railway.app",  
     ],
     allow_credentials=True,
     allow_methods=["*"],
