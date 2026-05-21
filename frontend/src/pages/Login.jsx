@@ -26,17 +26,11 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/auth/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          // CORRECCIÓN 1: Enviamos el objeto correcto
-          body: JSON.stringify({ email, password }),
-        },
-      );
+      const response = await fetch("http://localhost:8000/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, role }),
+      });
 
       const data = await response.json();
 

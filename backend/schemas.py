@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr, HttpUrl, Field
 from typing import Optional, List
 from datetime import datetime
 
-# Esquema para Ciclos
+# ========== ESQUEMAS DE CICLOS ==========
 class CicloBase(BaseModel):
     nombre: str
     anio_inicio: int
@@ -15,7 +15,24 @@ class CicloResponse(CicloBase):
     id: int
     model_config = {"from_attributes": True}
 
-# Esquema para Alumnos
+# ========== ESQUEMAS DE USUARIOS ==========
+class UsuarioCreate(BaseModel):
+    nombre: str
+    email: EmailStr
+    password: str = "hola123"
+    rol: str = "alumno"  # Por defecto alumno, pero el profe puede cambiarlo
+
+    model_config = {"from_attributes": True}
+
+class UsuarioResponse(BaseModel):
+    id: int
+    nombre: str
+    email: EmailStr
+    rol: str
+
+    model_config = {"from_attributes": True}
+
+# ========== ESQUEMAS DE ALUMNOS ==========
 class AlumnoBase(BaseModel):
     ciclo_id: int
     cv_url: Optional[str] = None
@@ -25,15 +42,6 @@ class AlumnoCreate(AlumnoBase):
     # necesitamos los datos para crear su Usuario base también.
     nombre: str
     email: EmailStr
-
-# Añade esto en schemas.py
-class UsuarioCreate(BaseModel):
-    nombre: str
-    email: EmailStr
-    password: str
-    rol: str = "alumno"  # Por defecto alumno, pero el profe puede cambiarlo
-
-    model_config = {"from_attributes": True}
 
 class AlumnoResponse(BaseModel):
     id: int
@@ -50,7 +58,7 @@ class AlumnoUpdate(BaseModel):
     telefono: Optional[str] = None
     email: Optional[EmailStr] = None
 
-# --- ESQUEMAS DE TUTOR LABORAL ---
+# ========== ESQUEMAS DE TUTORES LABORALES ==========
 class TutorLaboralBase(BaseModel):
     nombre: str
     dni: str
@@ -63,7 +71,7 @@ class TutorLaboralResponse(TutorLaboralBase):
     id: int
     model_config = {"from_attributes": True}
 
-# --- ESQUEMAS DE EMPRESA ---
+# ========== ESQUEMAS DE EMPRESAS ==========
 class EmpresaBase(BaseModel):
     nombre: str
     direccion: Optional[str] = None
@@ -82,7 +90,7 @@ class EmpresaResponse(EmpresaBase):
     tutores: List[TutorLaboralResponse] = []
     model_config = {"from_attributes": True}
 
-# --- ESQUEMAS DE PLAZAS ---
+# ========== ESQUEMAS DE PLAZAS ==========
 class PlazaBase(BaseModel):
     empresa_id: int
     ciclo_id: int
@@ -97,7 +105,7 @@ class PlazaResponse(PlazaBase):
     plazas_disponibles: int
     model_config = {"from_attributes": True}
 
-# --- ESQUEMAS DE ASIGNACIÓN (Drag & Drop) ---
+# ========== ESQUEMAS DE ASIGNACIÓN ==========
 class AsignacionBase(BaseModel):
     alumno_id: int
     plaza_id: int
@@ -111,7 +119,7 @@ class AsignacionResponse(AsignacionBase):
     fecha_asignacion: datetime
     model_config = {"from_attributes": True}
 
-# --- ESQUEMAS DE SEGUIMIENTO ---
+# ========== ESQUEMAS DE SEGUIMIENTO ==========
 class SeguimientoBase(BaseModel):
     empresa_id: int
     profesor_id: int
@@ -125,12 +133,12 @@ class SeguimientoResponse(SeguimientoBase):
     id: int
     model_config = {"from_attributes": True}
 
-# Esquema para recibir datos de inicio de sesión
+# ========== ESQUEMAS DE INICIAR SESIÓN ==========
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-# Esquema para la respuesta que contiene el Token JWT
+# ========== ESQUEMAS DE TOKENS ==========
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -139,6 +147,7 @@ class TokenData(BaseModel):
     email: Optional[str] = None
     rol: Optional[str] = None
 
+# ========== ESQUEMAS DE CONFIGURACIÓN ==========
 class ConfiguracionBase(BaseModel):
     fecha_inicio: datetime
     fecha_fin: datetime

@@ -88,13 +88,6 @@ def read_root():
     return {"message": "Bienvenido al GestorFFEOE API"}
 
 # ========== RUTAS DE CICLOS ==========
-@app.post("/ciclos/", response_model=schemas.CicloResponse)
-def crear_ciclo(ciclo: schemas.CicloCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    db_ciclo = models.Ciclo(**ciclo.model_dump())
-    db.add(db_ciclo)
-    db.commit()
-    db.refresh(db_ciclo)
-    return db_ciclo
 
 @app.get("/ciclos/", response_model=List[schemas.CicloResponse])
 def listar_ciclos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
@@ -249,27 +242,28 @@ def crear_usuario(usuario: schemas.UsuarioCreate, db: Session = Depends(get_db),
     return {"message": "Usuario creado con éxito"}
 
 # ========== RUTAS DE ALUMNOS ==========
-@app.post("/alumnos/{alumno_id}/upload-cv/")
-async def subir_cv(alumno_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    # 1. Validar que sea un PDF
-    if file.content_type != "application/pdf":
+@app.post("/alumnos/me/cv")
+def subir_cv(cv: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # Validar que sea un PDF usando la nueva variable 'cv'
+    if not cv.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF")
-
-    # 2. Buscar al alumno en la BD
-    db_alumno = db.query(models.Alumno).filter(models.Alumno.id == alumno_id).first()
+    
+    db_alumno = db.query(models.Alumno).filter(models.Alumno.usuario_id == current_user.id).first()
     if not db_alumno:
         raise HTTPException(status_code=404, detail="Alumno no encontrado")
-
-    # 3. Guardar el archivo físicamente
-    file_path = f"uploads/cv_{alumno_id}.pdf"
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
-
-    # 4. Guardar la URL en la base de datos[cite: 3]
-    db_alumno.cv_url = f"/static/cv_{alumno_id}.pdf"
+        
+    # Guardar el archivo físicamente en el servidor
+    nombre_archivo = f"cv_{current_user.id}_{cv.filename}"
+    ruta_archivo = os.path.join("uploads", nombre_archivo)
+    
+    with open(ruta_archivo, "wb") as buffer:
+        buffer.write(cv.file.read())  # <-- Cambiado a 'cv.file'
+        
+    # Actualizar la URL en la base de datos
+    db_alumno.cv_url = f"/static/{nombre_archivo}"
     db.commit()
-
-    return {"message": "CV subido con éxito", "url": db_alumno.cv_url}
+    
+    return {"cv_url": db_alumno.cv_url, "message": "CV subido con éxito"}
 
 @app.get("/alumnos/{alumno_id}/dashboard")
 def obtener_dashboard_alumno(alumno_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
@@ -321,7 +315,7 @@ def obtener_mi_dashboard(db: Session = Depends(get_db), current_user: models.Usu
     # Pasamos el ID del ALUMNO (de su tabla específica), no del usuario base
     return obtener_dashboard_alumno(alumno.id, db)
 
-@app.put("/alumnos/me/contacto")
+@app.patch("/alumnos/me/contacto")
 def actualizar_mis_datos(datos: schemas.AlumnoUpdate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # 1. Buscamos la extensión de alumno del usuario actual[cite: 3, 4]
     alumno = db.query(models.Alumno).filter(models.Alumno.usuario_id == current_user.id).first()
@@ -436,6 +430,106 @@ def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usu
         .all()
     
     return empresas
+
+# ========== RUTAS DE ADMINS ==========
+@app.get("/admin/ciclos", response_model=List[schemas.CicloResponse])
+def listar_ciclos_admin(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    return db.query(models.Ciclo).all()
+
+@app.post("/admin/ciclos", response_model=schemas.CicloResponse)
+def crear_ciclo_admin(ciclo: schemas.CicloCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    
+    # Comprobar si ya existe un ciclo con el mismo nombre
+    db_ciclo_existente = db.query(models.Ciclo).filter(models.Ciclo.nombre == ciclo.nombre).first()
+    if db_ciclo_existente:
+        raise HTTPException(status_code=400, detail="El ciclo ya existe")
+
+    # Mapeo directo y limpio a las columnas de la Base de Datos
+    db_ciclo = models.Ciclo(
+        nombre=ciclo.nombre,
+        anio_inicio=ciclo.anio_inicio,
+        anio_fin=ciclo.anio_fin
+    )
+    db.add(db_ciclo)
+    db.commit()
+    db.refresh(db_ciclo)
+    return db_ciclo
+
+@app.get("/admin/stats")
+def obtener_estadisticas_admin(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    
+    total_ciclos = db.query(models.Ciclo).count()
+    total_profesores = db.query(models.Usuario).filter(models.Usuario.rol == "profesor").count()
+    total_alumnos = db.query(models.Usuario).filter(models.Usuario.rol == "alumno").count()
+    
+    return {
+        "total_ciclos": total_ciclos,
+        "total_profesores": total_profesores,
+        "total_alumnos": total_alumnos
+    }
+
+@app.get("/admin/profesores")
+def listar_profesores(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    # Retorna los usuarios que tengan rol de profesor
+    return db.query(models.Usuario).filter(models.Usuario.rol == "profesor").all()
+
+@app.post("/admin/profesores", response_model=schemas.UsuarioResponse)
+def crear_profesor_admin(profesor: schemas.UsuarioCreate,db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    # 1. Validar que quien hace la petición sea Administrador
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    
+    # 2. Comprobar si el email ya está registrado en el sistema
+    email_existente = db.query(models.Usuario).filter(models.Usuario.email == profesor.email).first()
+    if email_existente:
+        raise HTTPException(status_code=400, detail="El email ya está registrado")
+    
+    # 3. Crear el nuevo objeto Usuario forzando el rol de "profesor"
+    nuevo_profe = models.Usuario(
+        nombre=profesor.nombre,
+        email=profesor.email,
+        password_hash=hash_password(profesor.password), # Hasheamos la contraseña de forma segura
+        rol="profesor" # Forzamos que sea profesor obligatoriamente
+    )
+    
+    db.add(nuevo_profe)
+    db.commit()
+    db.refresh(nuevo_profe)
+    
+    return nuevo_profe
+
+@app.get("/admin/configuracion")
+def obtener_configuracion(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    config = db.query(models.ConfiguracionGlobal).first()
+    if not config:
+        return {"fecha_inicio": None, "fecha_fin": None, "descripcion": ""}
+    return config
+
+@app.put("/admin/configuracion")
+def guardar_configuracion(config_in: schemas.ConfiguracionBase, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
+    if current_user.rol != "admin":
+        raise HTTPException(status_code=403, detail="Solo el admin puede configurar periodos")
+    
+    db_config = db.query(models.ConfiguracionGlobal).first()
+    if not db_config:
+        db_config = models.ConfiguracionGlobal(**config_in.model_dump())
+        db.add(db_config)
+    else:
+        db_config.fecha_inicio = config_in.fecha_inicio
+        db_config.fecha_fin = config_in.fecha_fin
+    
+    db.commit()
+    return {"message": "Configuración actualizada con éxito"}
 
 # ========== RUTAS DE EMPRESAS ==========
 @app.post("/empresas/importar/")

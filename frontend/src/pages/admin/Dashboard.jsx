@@ -96,8 +96,8 @@ function TabCiclos() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     nombre: "",
-    anno_inicio: "",
-    anno_fin: "",
+    anio_inicio: "",
+    anio_fin: "",
   });
   const [msg, setMsg] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -120,15 +120,15 @@ function TabCiclos() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nombre: form.nombre,
-          anno_inicio: Number(form.anno_inicio),
-          anno_fin: Number(form.anno_fin),
+          anio_inicio: Number(form.anio_inicio),
+          anio_fin: Number(form.anio_fin),
         }),
       });
       if (r.ok) {
         const nuevo = await r.json();
         setCiclos((prev) => [...prev, nuevo]);
         setMsg("!Ciclo creado correctamente.");
-        setForm({ nombre: "", anno_inicio: "", anno_fin: "" });
+        setForm({ nombre: "", anio_inicio: "", anio_fin: "" });
       } else {
         const data = await r.json();
         setMsg(data.detail || "Error al crear el ciclo.");
@@ -179,9 +179,9 @@ function TabCiclos() {
               <input
                 type="number"
                 placeholder="2025"
-                value={form.anno_inicio}
+                value={form.anio_inicio}
                 onChange={(e) =>
-                  setForm({ ...form, anno_inicio: e.target.value })
+                  setForm({ ...form, anio_inicio: e.target.value })
                 }
                 style={{ ...styles.input, marginTop: "4px" }}
                 required
@@ -192,8 +192,8 @@ function TabCiclos() {
               <input
                 type="number"
                 placeholder="2026"
-                value={form.anno_fin}
-                onChange={(e) => setForm({ ...form, anno_fin: e.target.value })}
+                value={form.anio_fin}
+                onChange={(e) => setForm({ ...form, anio_fin: e.target.value })}
                 style={{ ...styles.input, marginTop: "4px" }}
                 required
               />
