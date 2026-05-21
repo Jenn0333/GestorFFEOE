@@ -353,7 +353,11 @@ function TabProfesores() {
               </p>
               <p style={{ fontSize: "0.76rem", color: C.muted }}>{p.email}</p>
             </div>
-            <span style={styles.tag}>{p.ciclo?.nombre || "Sin ciclo"}</span>
+            <span style={styles.tag}>
+              {ciclos.find((c) => c.id === p.ciclo_id)?.nombre ||
+                p.ciclo?.nombre ||
+                "Sin ciclo"}
+            </span>
           </div>
         ))}
       </Card>
