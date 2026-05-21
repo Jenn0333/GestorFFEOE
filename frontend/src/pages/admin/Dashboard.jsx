@@ -140,22 +140,23 @@ function TabCiclos() {
     }
   };
 
-  // 1. CAMBIO AQUÍ: Función handleEliminar actualizada
   const handleEliminar = async (id) => {
-    if (!window.confirm("¿Eliminar este ciclo?")) return;
+    if (!window.confirm("¿Seguro que quieres eliminar este ciclo?")) return;
     setMsg("");
+
     try {
       const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
+
       if (r.ok) {
         setCiclos((prev) => prev.filter((c) => c.id !== id));
-        setMsg("!Ciclo eliminado correctamente."); // El ! lo pone en verde
+        setMsg("!Ciclo eliminado correctamente.");
       } else {
-        // Aquí capturamos el mensaje de "Tiene alumnos" del backend
+        // Aquí es donde el backend nos dice que hay alumnos
         const data = await r.json();
-        setMsg(data.detail || "Error al eliminar el ciclo.");
+        setMsg(data.detail || "No se puede eliminar el ciclo.");
       }
-    } catch {
-      setMsg("No se pudo conectar con el servidor.");
+    } catch (error) {
+      setMsg("Error de conexión al intentar eliminar.");
     }
   };
 
