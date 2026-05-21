@@ -114,26 +114,33 @@ function TabCiclos() {
     setGuardando(true);
     setMsg("");
     try {
-      const r = await apiFetch("/admin/ciclos", {
+      const r = await apiFetch("/admin/profesores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nombre: form.nombre,
-          anio_inicio: Number(form.anio_inicio),
-          anio_fin: Number(form.anio_fin),
-        }),
+        body: JSON.stringify({ ...form, ciclo_id: Number(form.ciclo_id) }),
       });
+
       if (r.ok) {
-        const nuevo = await r.json();
-        setCiclos((prev) => [...prev, nuevo]);
-        setMsg("!Ciclo creado correctamente.");
-        setForm({ nombre: "", anio_inicio: "", anio_fin: "" });
+        const nuevoDelServidor = await r.json();
+
+        // BUSCAMOS EL CICLO MANUALMENTE PARA QUE APAREZCA AL INSTANTE
+        const cicloAsignado = ciclos.find(
+          (c) => c.id === Number(form.ciclo_id),
+        );
+        const nuevoConDatos = {
+          ...nuevoDelServidor,
+          ciclo: cicloAsignado, // Le "inyectamos" el nombre del ciclo para la vista
+        };
+
+        setProfesores((prev) => [...prev, nuevoConDatos]);
+        setMsg("!Profesor creado y asignado.");
+        setForm({ nombre: "", apellidos: "", email: "", ciclo_id: "" });
       } else {
         const data = await r.json();
-        setMsg(data.detail || "Error al crear el ciclo.");
+        setMsg(data.detail || "Error al crear.");
       }
     } catch {
-      setMsg("No se pudo conectar con el servidor.");
+      setMsg("Error de conexión.");
     } finally {
       setGuardando(false);
     }
@@ -353,7 +360,11 @@ function TabProfesores() {
               </p>
               <p style={{ fontSize: "0.76rem", color: C.muted }}>{p.email}</p>
             </div>
-            <span style={styles.tag}>{p.ciclo?.nombre || "Sin ciclo"}</span>
+            <span style={styles.tag}>
+              {ciclos.find((c) => c.id === p.ciclo_id)?.nombre ||
+                p.ciclo?.nombre ||
+                "Sin ciclo"}
+            </span>
           </div>
         ))}
       </Card>
