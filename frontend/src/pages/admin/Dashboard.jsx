@@ -335,7 +335,7 @@ return (
   </div>
 );
 
-// ── Pestaña Profesores ────────────────────────────────────────────────────────
+// ── Pestaña Profesores (CORREGIDA) ───────────────────────────────────────────
 function TabProfesores() {
   const [profesores, setProfesores] = useState([]);
   const [ciclos, setCiclos] = useState([]);
@@ -350,20 +350,31 @@ function TabProfesores() {
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
+    // CAMBIO: Usamos /admin/ciclos en lugar de /ciclos
     Promise.all([
       apiFetch("/admin/profesores").then((r) => r.json()),
-      apiFetch("/ciclos").then((r) => r.json()),
+      apiFetch("/admin/ciclos").then((r) => r.json()),
     ])
       .then(([p, c]) => {
-        setProfesores(p);
-        setCiclos(c);
+        // Nos aseguramos de que lo que guardamos sean Arrays
+        setProfesores(Array.isArray(p) ? p : []);
+        setCiclos(Array.isArray(c) ? c : []);
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error("Error cargando datos:", err);
+        setMsg("Error al cargar la lista de ciclos o profesores.");
+      })
       .finally(() => setLoading(false));
   }, []);
 
   const handleCrear = async (e) => {
     e.preventDefault();
+    if (!form.ciclo_id) {
+      setMsg("Por favor, selecciona un ciclo.");
+      return;
+    }
+
     setGuardando(true);
     setMsg("");
     try {
@@ -371,10 +382,13 @@ function TabProfesores() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
+          nombre: form.nombre,
+          apellidos: form.apellidos,
+          email: form.email,
           ciclo_id: Number(form.ciclo_id),
         }),
       });
+
       if (r.ok) {
         const nuevo = await r.json();
         setProfesores((prev) => [...prev, nuevo]);
@@ -391,6 +405,7 @@ function TabProfesores() {
     }
   };
 
+  // ... (El resto del return se mantiene igual, ya está bien estructurado)
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
       {/* Formulario */}
