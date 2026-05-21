@@ -128,7 +128,7 @@ function TabAlumnos() {
     setSubiendoCsv(true);
     setCsvMsg("");
     const formData = new FormData();
-    formData.append("csv", file);
+    formData.append("file", file);
     try {
       const r = await apiFetch("/profesores/me/alumnos/importar", {
         method: "POST",
@@ -136,7 +136,7 @@ function TabAlumnos() {
       });
       const data = await r.json();
       if (r.ok) {
-        setCsvMsg(`!Se importaron ${data.importados} alumnos correctamente.`);
+        setCsvMsg(`!Se importaron ${data.message} alumnos correctamente.`);
         // Recargar lista
         apiFetch("/profesores/me/alumnos")
           .then((r) => r.json())
@@ -260,7 +260,7 @@ function TabEmpresas() {
     setSubiendoCsv(true);
     setCsvMsg("");
     const formData = new FormData();
-    formData.append("csv", file);
+    formData.append("file", file);
     try {
       const r = await apiFetch("/profesores/me/empresas/importar", {
         method: "POST",
@@ -268,7 +268,7 @@ function TabEmpresas() {
       });
       const data = await r.json();
       if (r.ok) {
-        setCsvMsg(`!Se importaron ${data.importadas} empresas correctamente.`);
+        setCsvMsg(`!Se importaron ${data.message} empresas correctamente.`);
         apiFetch("/profesores/me/empresas")
           .then((r) => r.json())
           .then(setEmpresas);

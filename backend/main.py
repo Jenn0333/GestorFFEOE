@@ -359,14 +359,14 @@ def obtener_mis_alumnos(db: Session = Depends(get_db), current_user: models.Usua
     
     return alumnos
 
-@app.post("profesores/me/alumnos/importar/")
+@app.post("/profesores/me/alumnos/importar")
 async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
 
     # 1. Obtener todos los IDs de ciclos existentes para validar rápido
     ciclos_existentes = {c.id for c in db.query(models.Ciclo.id).all()}
-    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
+    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'), delimiter=';')
     alumnos_creados = 0
     errores = []
 
@@ -426,6 +426,33 @@ def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usu
         .all()
     
     return empresas
+
+@app.post("/profesores/me/empresas/importar")
+async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
+    # 1. Validar extensión
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
+
+    # 2. Leer CSV
+    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'), delimiter=';')
+    
+    empresas_creadas = 0
+    for row in reader:
+        # 3. Crear instancia del modelo Empresa
+        nueva_empresa = models.Empresa(
+            nombre=row['nombre'],
+            direccion=row.get('direccion'),
+            web=row.get('web'),
+            persona_contacto=row.get('persona_contacto'),
+            email=row.get('email'),
+            telefono=row.get('telefono'),
+            responsable_legal_dni=row.get('responsable_legal_dni')
+        )
+        db.add(nueva_empresa)
+        empresas_creadas += 1
+    
+    db.commit()
+    return {"message": f"Se han importado {empresas_creadas} empresas correctamente"}
 
 # ========== RUTAS DE ADMINS ==========
 @app.get("/admin/ciclos", response_model=List[schemas.CicloResponse])
@@ -528,32 +555,6 @@ def guardar_configuracion(config_in: schemas.ConfiguracionBase, db: Session = De
     return {"message": "Configuración actualizada con éxito"}
 
 # ========== RUTAS DE EMPRESAS ==========
-@app.post("/empresas/importar/")
-async def importar_empresas_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    # 1. Validar extensión
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
-
-    # 2. Leer CSV
-    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
-    
-    empresas_creadas = 0
-    for row in reader:
-        # 3. Crear instancia del modelo Empresa
-        nueva_empresa = models.Empresa(
-            nombre=row['nombre'],
-            direccion=row.get('direccion'),
-            web=row.get('web'),
-            persona_contacto=row.get('persona_contacto'),
-            email=row.get('email'),
-            telefono=row.get('telefono'),
-            responsable_legal_dni=row.get('responsable_legal_dni')
-        )
-        db.add(nueva_empresa)
-        empresas_creadas += 1
-    
-    db.commit()
-    return {"message": f"Se han importado {empresas_creadas} empresas correctamente"}
 
 @app.get("/empresas/{empresa_id}/tutores", response_model=List[schemas.TutorLaboralResponse])
 def listar_tutores_empresa(empresa_id: int, db: Session = Depends(get_db)):
@@ -561,7 +562,7 @@ def listar_tutores_empresa(empresa_id: int, db: Session = Depends(get_db)):
     return db.query(models.TutorLaboral).filter(models.TutorLaboral.empresa_id == empresa_id).all()
 
 # ========== RUTAS DE PLAZAS ==========
-@app.post("/plazas/", response_model=schemas.PlazaResponse)
+@app.post("/plazas", response_model=schemas.PlazaResponse)
 def crear_o_actualizar_plaza(plaza: schemas.PlazaCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # 1. Verificar si ya existe una configuración de plazas para esa empresa y ciclo
     db_plaza = db.query(models.Plaza).filter(
@@ -587,7 +588,7 @@ def listar_plazas_disponibles(db: Session = Depends(get_db)):
     return db.query(models.Plaza).filter(models.Plaza.cantidad_ocupada < models.Plaza.cantidad_total).all()
 
 # ========== RUTAS DE TUTORES ==========
-@app.post("/tutores/", response_model=schemas.TutorLaboralResponse)
+@app.post("/tutores", response_model=schemas.TutorLaboralResponse)
 def crear_tutor(tutor: schemas.TutorLaboralCreate, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
     # Verificamos que la empresa existe antes de asignarle un tutor
     empresa = db.query(models.Empresa).filter(models.Empresa.id == tutor.empresa_id).first()
@@ -610,18 +611,3 @@ def obtener_datos_tablero(db: Session = Depends(get_db), current_user: models.Us
         "alumnos": alumnos_pendientes,
         "plazas": plazas_libres
     }
-
-# ========== RUTAS DE CONFIGURACIÓN ==========
-@app.post("/configuracion/", response_model=schemas.ConfiguracionResponse)
-def definir_periodo(config: schemas.ConfiguracionBase, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    # Solo el administrador puede configurar esto
-    if current_user.rol != "admin":
-        raise HTTPException(status_code=403, detail="Solo el admin puede configurar periodos")
-    
-    # Borramos la anterior y creamos la nueva (para tener solo una configuración activa)
-    db.query(models.ConfiguracionGlobal).delete()
-    nueva_conf = models.ConfiguracionGlobal(**config.model_dump())
-    db.add(nueva_conf)
-    db.commit()
-    db.refresh(nueva_conf)
-    return nueva_conf
