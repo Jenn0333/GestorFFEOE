@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-
 import { apiFetch } from "../../utils/apiFetch";
 
 const C = {
@@ -105,7 +104,7 @@ function TabCiclos() {
   useEffect(() => {
     apiFetch("/admin/ciclos")
       .then((r) => r.json())
-      .then(setCiclos)
+      .then((data) => setCiclos(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -141,41 +140,66 @@ function TabCiclos() {
   };
 
   const handleEliminar = async (id) => {
-    // 1. Confirmación inmediata
     if (!window.confirm("¿Estás seguro de eliminar este ciclo?")) return;
-
-    setMsg(""); // Limpiar mensajes previos
-
+    setMsg("");
     try {
-      // 2. Llamada a la API (Sin barra final después del ID)
-      const r = await apiFetch(`/ciclos/${id}`, {
-        method: "DELETE",
-      });
-
+      const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
       const data = await r.json();
-
       if (r.ok) {
-        // Éxito
         setCiclos((prev) => prev.filter((c) => c.id !== id));
         setMsg("!Ciclo eliminado correctamente.");
       } else {
-        // Aquí es donde CAPTURAMOS tu mensaje de "No se puede eliminar porque tiene alumnos"
         setMsg(data.detail || "Error al eliminar el ciclo.");
       }
-    } catch (error) {
+    } catch {
       setMsg("Error de conexión con el servidor.");
     }
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {/* Formulario nuevo ciclo */}
       <Card title="Crear nuevo ciclo formativo">
         <form
           onSubmit={handleCrear}
           style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
         >
-          {/* ... tus inputs ... */}
+          <div>
+            <label style={styles.label}>Nombre del ciclo</label>
+            <input
+              type="text"
+              placeholder="Ej: DAW"
+              value={form.nombre}
+              onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+              style={styles.input}
+              required
+            />
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "0.8rem",
+            }}
+          >
+            <input
+              type="number"
+              placeholder="Año inicio"
+              value={form.anio_inicio}
+              onChange={(e) =>
+                setForm({ ...form, anio_inicio: e.target.value })
+              }
+              style={styles.input}
+              required
+            />
+            <input
+              type="number"
+              placeholder="Año fin"
+              value={form.anio_fin}
+              onChange={(e) => setForm({ ...form, anio_fin: e.target.value })}
+              style={styles.input}
+              required
+            />
+          </div>
           <button type="submit" disabled={guardando} style={styles.btnPrimario}>
             {guardando ? "Creando..." : "Crear ciclo"}
           </button>
@@ -183,7 +207,6 @@ function TabCiclos() {
         </form>
       </Card>
 
-      {/* Lista de ciclos */}
       <Card title={`Ciclos existentes (${ciclos.length})`}>
         {loading ? (
           <p>Cargando...</p>
@@ -191,7 +214,14 @@ function TabCiclos() {
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             {ciclos.map((c) => (
               <div key={c.id} style={styles.listaItem}>
-                {/* ... info del ciclo ... */}
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: "600", fontSize: "0.88rem" }}>
+                    {c.nombre}
+                  </p>
+                  <p style={{ fontSize: "0.76rem", color: C.muted }}>
+                    {c.anio_inicio} - {c.anio_fin}
+                  </p>
+                </div>
                 <button
                   onClick={() => handleEliminar(c.id)}
                   style={styles.btnDanger}
@@ -202,8 +232,6 @@ function TabCiclos() {
             ))}
           </div>
         )}
-
-        {/* 2. CAMBIO AQUÍ: Ponemos el mensaje también al final de la lista */}
         <div style={{ marginTop: "1rem" }}>
           <MensajeFeedback msg={msg} />
         </div>
@@ -212,137 +240,7 @@ function TabCiclos() {
   );
 }
 
-const handleEliminar = async (id) => {
-  if (!window.confirm("¿Eliminar este ciclo?")) return;
-  setMsg(""); // Limpiamos mensajes previos
-
-  try {
-    const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
-
-    if (r.ok) {
-      // Si sale bien, filtramos la lista y mostramos éxito
-      setCiclos((prev) => prev.filter((c) => c.id !== id));
-      setMsg("!Ciclo eliminado correctamente.");
-    } else {
-      // AQUÍ capturamos el error 400 que enviamos desde el backend
-      const data = await r.json();
-      setMsg(data.detail || "Error al eliminar el ciclo.");
-    }
-  } catch (error) {
-    setMsg("No se pudo conectar con el servidor.");
-  }
-};
-
-return (
-  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-    {/* Formulario nuevo ciclo */}
-    <Card title="Crear nuevo ciclo formativo">
-      <form
-        onSubmit={handleCrear}
-        style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
-      >
-        <div>
-          <label style={styles.label}>Nombre del ciclo</label>
-          <input
-            type="text"
-            placeholder="Ej: Desarrollo de Aplicaciones Web"
-            value={form.nombre}
-            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-            style={{ ...styles.input, marginTop: "4px" }}
-            required
-          />
-        </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "0.8rem",
-          }}
-        >
-          <div>
-            <label style={styles.label}>Año inicio</label>
-            <input
-              type="number"
-              placeholder="2025"
-              value={form.anio_inicio}
-              onChange={(e) =>
-                setForm({ ...form, anio_inicio: e.target.value })
-              }
-              style={{ ...styles.input, marginTop: "4px" }}
-              required
-            />
-          </div>
-          <div>
-            <label style={styles.label}>Año fin</label>
-            <input
-              type="number"
-              placeholder="2026"
-              value={form.anio_fin}
-              onChange={(e) => setForm({ ...form, anio_fin: e.target.value })}
-              style={{ ...styles.input, marginTop: "4px" }}
-              required
-            />
-          </div>
-        </div>
-        <button type="submit" disabled={guardando} style={styles.btnPrimario}>
-          {guardando ? "Creando..." : "Crear ciclo"}
-        </button>
-        <MensajeFeedback msg={msg} />
-      </form>
-    </Card>
-
-    {/* Lista de ciclos */}
-    <Card title={`Ciclos existentes (${ciclos.length})`}>
-      {loading ? (
-        <p style={{ color: C.muted, fontSize: "0.85rem" }}>Cargando...</p>
-      ) : ciclos.length === 0 ? (
-        <p style={{ color: C.muted, fontSize: "0.85rem" }}>
-          No hay ciclos creados todavía.
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          {Array.isArray(ciclos) &&
-            ciclos.map((c) => (
-              <div key={c.id} style={styles.listaItem}>
-                <div
-                  style={{
-                    ...styles.inicialesCirculo,
-                    background: "#E6F1FB",
-                    color: "#0C447C",
-                    borderRadius: "8px",
-                  }}
-                >
-                  {c.nombre?.slice(0, 3).toUpperCase()}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p
-                    style={{
-                      fontWeight: "600",
-                      fontSize: "0.88rem",
-                      color: C.text,
-                    }}
-                  >
-                    {c.nombre}
-                  </p>
-                  <p style={{ fontSize: "0.76rem", color: C.muted }}>
-                    {c.anno_inicio} – {c.anno_fin}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleEliminar(c.id)}
-                  style={styles.btnDanger}
-                >
-                  Eliminar
-                </button>
-              </div>
-            ))}
-        </div>
-      )}
-    </Card>
-  </div>
-);
-
-// ── Pestaña Profesores (CORREGIDA) ───────────────────────────────────────────
+// ── Pestaña Profesores ───────────────────────────────────────────────────────
 function TabProfesores() {
   const [profesores, setProfesores] = useState([]);
   const [ciclos, setCiclos] = useState([]);
@@ -360,182 +258,104 @@ function TabProfesores() {
     setLoading(true);
     Promise.all([
       apiFetch("/admin/profesores").then((r) => r.json()),
-      apiFetch("/admin/ciclos").then((r) => r.json()), // Asegúrate que lleva el /admin delante
+      apiFetch("/admin/ciclos").then((r) => r.json()),
     ])
       .then(([p, c]) => {
-        // Forzamos que sean arrays para que el .map no falle
         setProfesores(Array.isArray(p) ? p : []);
         setCiclos(Array.isArray(c) ? c : []);
       })
-      .catch(() => {
-        setMsg("Error al cargar datos del servidor.");
-      })
+      .catch(() => setMsg("Error al cargar datos."))
       .finally(() => setLoading(false));
   }, []);
 
   const handleCrear = async (e) => {
     e.preventDefault();
-    if (!form.ciclo_id) {
-      setMsg("Por favor, selecciona un ciclo.");
-      return;
-    }
-
     setGuardando(true);
     setMsg("");
     try {
       const r = await apiFetch("/admin/profesores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nombre: form.nombre,
-          apellidos: form.apellidos,
-          email: form.email,
-          ciclo_id: Number(form.ciclo_id),
-        }),
+        body: JSON.stringify({ ...form, ciclo_id: Number(form.ciclo_id) }),
       });
-
       if (r.ok) {
         const nuevo = await r.json();
         setProfesores((prev) => [...prev, nuevo]);
-        setMsg("!Profesor creado y asignado correctamente.");
+        setMsg("!Profesor creado correctamente.");
         setForm({ nombre: "", apellidos: "", email: "", ciclo_id: "" });
       } else {
         const data = await r.json();
-        setMsg(data.detail || "Error al crear el profesor.");
+        setMsg(data.detail || "Error al crear.");
       }
     } catch {
-      setMsg("No se pudo conectar con el servidor.");
+      setMsg("Error de conexión.");
     } finally {
       setGuardando(false);
     }
   };
 
-  // ... (El resto del return se mantiene igual, ya está bien estructurado)
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {/* Formulario */}
-      <Card title="Añadir profesor y asignar a ciclo">
+      <Card title="Añadir profesor">
         <form
           onSubmit={handleCrear}
           style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}
         >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "0.8rem",
-            }}
+          <input
+            type="text"
+            placeholder="Nombre"
+            value={form.nombre}
+            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+            style={styles.input}
+            required
+          />
+          <input
+            type="text"
+            placeholder="Apellidos"
+            value={form.apellidos}
+            onChange={(e) => setForm({ ...form, apellidos: e.target.value })}
+            style={styles.input}
+            required
+          />
+          <input
+            type="email"
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            style={styles.input}
+            required
+          />
+          <select
+            value={form.ciclo_id}
+            onChange={(e) => setForm({ ...form, ciclo_id: e.target.value })}
+            style={styles.input}
+            required
           >
-            <div>
-              <label style={styles.label}>Nombre</label>
-              <input
-                type="text"
-                placeholder="María"
-                value={form.nombre}
-                onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                style={{ ...styles.input, marginTop: "4px" }}
-                required
-              />
-            </div>
-            <div>
-              <label style={styles.label}>Apellidos</label>
-              <input
-                type="text"
-                placeholder="López García"
-                value={form.apellidos}
-                onChange={(e) =>
-                  setForm({ ...form, apellidos: e.target.value })
-                }
-                style={{ ...styles.input, marginTop: "4px" }}
-                required
-              />
-            </div>
-          </div>
-          <div>
-            <label style={styles.label}>Correo electrónico</label>
-            <input
-              type="email"
-              placeholder="profesor@instituto.es"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              style={{ ...styles.input, marginTop: "4px" }}
-              required
-            />
-          </div>
-          <div>
-            <label style={styles.label}>Asignar a ciclo</label>
-            <select
-              value={form.ciclo_id}
-              onChange={(e) => setForm({ ...form, ciclo_id: e.target.value })}
-              style={{ ...styles.input, marginTop: "4px" }}
-              required
-            >
-              <option value="">Selecciona un ciclo...</option>
-              {/* Comprobamos que ciclos sea un array y tenga contenido */}
-              {Array.isArray(ciclos) && ciclos.length > 0 ? (
-                ciclos.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre} ({c.anno_inicio}-{c.anno_fin})
-                  </option>
-                ))
-              ) : (
-                <option disabled>
-                  No hay ciclos creados. Créalos en la pestaña Ciclos.
-                </option>
-              )}
-            </select>
-          </div>
+            <option value="">Selecciona un ciclo...</option>
+            {ciclos.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
+          </select>
           <button type="submit" disabled={guardando} style={styles.btnPrimario}>
-            {guardando ? "Guardando..." : "Añadir profesor"}
+            Añadir profesor
           </button>
           <MensajeFeedback msg={msg} />
         </form>
       </Card>
-
-      {/* Lista profesores */}
       <Card title={`Profesores (${profesores.length})`}>
-        {loading ? (
-          <p style={{ color: C.muted, fontSize: "0.85rem" }}>Cargando...</p>
-        ) : profesores.length === 0 ? (
-          <p style={{ color: C.muted, fontSize: "0.85rem" }}>
-            No hay profesores registrados.
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {profesores.map((p) => (
-              <div key={p.id} style={styles.listaItem}>
-                <div style={styles.inicialesCirculo}>
-                  {`${p.nombre?.[0] || ""}${p.apellidos?.[0] || ""}`.toUpperCase()}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p
-                    style={{
-                      fontWeight: "600",
-                      fontSize: "0.88rem",
-                      color: C.text,
-                    }}
-                  >
-                    {p.nombre} {p.apellidos}
-                  </p>
-                  <p style={{ fontSize: "0.76rem", color: C.muted }}>
-                    {p.email}
-                  </p>
-                </div>
-                <span
-                  style={{
-                    fontSize: "0.76rem",
-                    color: "#0C447C",
-                    background: "#E6F1FB",
-                    padding: "3px 10px",
-                    borderRadius: "20px",
-                  }}
-                >
-                  {p.ciclo?.nombre || "Sin ciclo"}
-                </span>
-              </div>
-            ))}
+        {profesores.map((p) => (
+          <div key={p.id} style={styles.listaItem}>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontWeight: "600", fontSize: "0.88rem" }}>
+                {p.nombre} {p.apellidos}
+              </p>
+              <p style={{ fontSize: "0.76rem", color: C.muted }}>{p.email}</p>
+            </div>
+            <span style={styles.tag}>{p.ciclo?.nombre || "Sin ciclo"}</span>
           </div>
-        )}
+        ))}
       </Card>
     </div>
   );
@@ -567,78 +387,50 @@ function TabConfiguracion() {
   const handleGuardar = async (e) => {
     e.preventDefault();
     setGuardando(true);
-    setMsg("");
     try {
       const r = await apiFetch("/admin/configuracion", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       });
-      if (r.ok) setMsg("!Configuración guardada correctamente.");
-      else setMsg("Error al guardar la configuración.");
+      if (r.ok) setMsg("!Guardado.");
+      else setMsg("Error al guardar.");
     } catch {
-      setMsg("No se pudo conectar con el servidor.");
+      setMsg("Error de conexión.");
     } finally {
       setGuardando(false);
     }
   };
 
   return (
-    <Card title="Periodo de asignación de prácticas">
-      <p style={{ fontSize: "0.82rem", color: C.muted, marginBottom: "1rem" }}>
-        Define las fechas en las que los profesores pueden realizar
-        asignaciones.
-      </p>
+    <Card title="Configuración del periodo">
       <form
         onSubmit={handleGuardar}
         style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}
       >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "0.8rem",
-          }}
-        >
-          <div>
-            <label style={styles.label}>Fecha inicio</label>
-            <input
-              type="date"
-              value={config.fecha_inicio}
-              onChange={(e) =>
-                setConfig({ ...config, fecha_inicio: e.target.value })
-              }
-              style={{ ...styles.input, marginTop: "4px" }}
-              required
-            />
-          </div>
-          <div>
-            <label style={styles.label}>Fecha fin</label>
-            <input
-              type="date"
-              value={config.fecha_fin}
-              onChange={(e) =>
-                setConfig({ ...config, fecha_fin: e.target.value })
-              }
-              style={{ ...styles.input, marginTop: "4px" }}
-              required
-            />
-          </div>
-        </div>
-        <div>
-          <label style={styles.label}>Descripción del periodo (opcional)</label>
-          <textarea
-            placeholder="Ej: Periodo de prácticas FCT curso 2025-2026"
-            value={config.descripcion}
-            onChange={(e) =>
-              setConfig({ ...config, descripcion: e.target.value })
-            }
-            rows={3}
-            style={{ ...styles.input, marginTop: "4px", resize: "vertical" }}
-          />
-        </div>
+        <input
+          type="date"
+          value={config.fecha_inicio}
+          onChange={(e) =>
+            setConfig({ ...config, fecha_inicio: e.target.value })
+          }
+          style={styles.input}
+        />
+        <input
+          type="date"
+          value={config.fecha_fin}
+          onChange={(e) => setConfig({ ...config, fecha_fin: e.target.value })}
+          style={styles.input}
+        />
+        <textarea
+          value={config.descripcion}
+          onChange={(e) =>
+            setConfig({ ...config, descripcion: e.target.value })
+          }
+          style={styles.input}
+        />
         <button type="submit" disabled={guardando} style={styles.btnPrimario}>
-          {guardando ? "Guardando..." : "Guardar configuración"}
+          Guardar
         </button>
         <MensajeFeedback msg={msg} />
       </form>
@@ -665,8 +457,7 @@ export default function AdminDashboard() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
+    localStorage.clear();
     window.location.href = "/";
   };
 
@@ -675,39 +466,19 @@ export default function AdminDashboard() {
 
   return (
     <div style={styles.page}>
-      {/* Navbar */}
       <header style={styles.navbar}>
         <div style={styles.navLogo}>
           <div style={styles.navLogoMark}>G</div>
-          <span style={{ fontWeight: "700", fontSize: "1rem", color: "#fff" }}>
-            GestorFFEOE
-          </span>
+          <span style={{ fontWeight: "700", color: "#fff" }}>GestorFFEOE</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span
-            style={{
-              color: C.greenMid,
-              fontSize: "0.82rem",
-              fontWeight: "500",
-            }}
-          >
-            Administrador
-          </span>
-          <div style={{ ...styles.avatar, background: "#378ADD" }}>AD</div>
           <button onClick={handleLogout} style={styles.logoutBtn}>
             Cerrar sesión
           </button>
         </div>
       </header>
-
       <main style={styles.main}>
-        {/* Cabecera */}
-        <div style={{ marginBottom: "1.5rem" }}>
-          <p style={styles.eyebrow}>Panel de administración</p>
-          <h1 style={styles.pageTitle}>Panel de control</h1>
-        </div>
-
-        {/* Stats */}
+        <h1 style={styles.pageTitle}>Panel de Control</h1>
         {stats && (
           <div
             style={{
@@ -727,8 +498,6 @@ export default function AdminDashboard() {
             />
           </div>
         )}
-
-        {/* Tabs */}
         <div style={styles.tabBar}>
           {TABS.map((tab) => (
             <button
@@ -743,8 +512,6 @@ export default function AdminDashboard() {
             </button>
           ))}
         </div>
-
-        {/* Contenido */}
         <TabComponente />
       </main>
     </div>
