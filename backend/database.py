@@ -1,14 +1,12 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Url hacia la base de datos
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:admin@localhost:5432/practicas"
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./practicas.db")
 
-# El engine es el que se encarga de la comunicación real
+if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
-
-# Cada instancia de SessionLocal será una sesión de base de datos
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Clase base de la que heredarán tus modelos (tablas)
 Base = declarative_base()
