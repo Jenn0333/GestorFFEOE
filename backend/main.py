@@ -383,50 +383,39 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
     f = io.StringIO(decoded)
     
     # DETECTOR AUTOMÁTICO DE DELIMITADOR (Comas o Puntos y comas)
-    # Lee los primeros caracteres para saber si el usuario subió comas o punto y coma
     try:
         dialect = csv.Sniffer().sniff(f.read(1024), delimiters=',;')
         f.seek(0)
         reader = csv.DictReader(f, dialect=dialect)
     except Exception:
-        # Por si el sniffer falla, dejamos el de comas por defecto
         f.seek(0)
-        reader = csv.DictReader(f, delimiter=',')
+        reader = csv.DictReader(f, delimiter=';') # Por si acaso, dejamos punto y coma por defecto
 
     alumnos_creados = 0
     errores = []
 
     for i, row in enumerate(reader):
-        # Creamos un bloque de transacción aislado para esta fila concreta
+        # CREAMOS UN ESCUDO SEGURO PARA ESTA FILA CON begin_nested()
         with db.begin_nested():
             try:
-                # Limpiamos espacios y convertimos cabeceras a minúsculas
+                # Limpiamos espacios en las cabeceras por si acaso
                 row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
                 
                 email = row.get('email')
-                nombre = row.get('nombre', '')
-                apellidos = row.get('apellidos', '')
-                nombre_completo = f"{nombre} {apellidos}".strip()
+                nombre_completo = f"{row.get('nombre', '')} {row.get('apellidos', '')}".strip()
                 c_id = row.get('ciclo_id')
 
-                # Validaciones previas
                 if not email or not nombre_completo or not c_id:
-                    errores.append(f"Fila {i+1}: Faltan campos obligatorios (email, nombre, apellidos o ciclo_id).")
+                    errores.append(f"Fila {i+1}: Faltan campos obligatorios.")
                     continue
 
-                # Verificamos si el usuario ya existe
+                # Verificamos si el usuario ya existe para no duplicar
                 existe = db.query(models.Usuario).filter(models.Usuario.email == email).first()
                 if existe:
                     errores.append(f"Fila {i+1}: El email {email} ya está registrado.")
                     continue
 
-                # Opcional: Validar que el ciclo con ese ID exista de verdad en la base de datos
-                ciclo_existe = db.query(models.Ciclo).filter(models.Ciclo.id == int(c_id)).first()
-                if not ciclo_existe:
-                    errores.append(f"Fila {i+1}: El ciclo_id {c_id} no existe en el sistema.")
-                    continue
-
-                # Creamos el Usuario base
+                # Guardamos el Usuario base
                 nuevo_usuario = models.Usuario(
                     nombre=nombre_completo,
                     email=email,
@@ -434,9 +423,9 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
                     rol="alumno"
                 )
                 db.add(nuevo_usuario)
-                db.flush()  # Genera el ID del usuario necesario para la FK del alumno
+                db.flush() # Esto asigna el ID en memoria intermedia
 
-                # Creamos el Alumno asociado
+                # Guardamos el Alumno
                 nuevo_alumno = models.Alumno(
                     usuario_id=nuevo_usuario.id,
                     ciclo_id=int(c_id)
@@ -445,15 +434,15 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
                 alumnos_creados += 1 
 
             except Exception as e:
-                # Al usar 'with db.begin_nested()', si salta un error aquí,
-                # SQLAlchemy hace un rollback interno de SOLO esta fila. No borra las demás.
-                errores.append(f"Fila {i+1}: Error inesperado -> {str(e)}")
+                # Si algo falla aquí dentro, el bloque 'with' hace un rollback automático
+                # que SOLO afecta a esta fila, manteniendo vivas las filas anteriores.
+                errores.append(f"Fila {i+1}: Error -> {str(e)}")
 
-    # Al salir del bucle, consolidamos permanentemente todos los registros correctos
+    # AL FINAL DEL BUCLE, HACEMOS EL COMMIT REAL EN LA BASE DE DATOS
     db.commit()
     
     return {
-        "message": f"Importación finalizada. {alumnos_creados} alumnos creados con éxito.",
+        "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
         "errores": errores
     }
 
