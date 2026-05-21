@@ -280,14 +280,26 @@ function TabProfesores() {
     setGuardando(true);
     setMsg("");
     try {
+      const payload = {
+        nombre: form.nombre,
+        apellidos: form.apellidos,
+        email: form.email,
+        ciclo_id: Number(form.ciclo_id), // <--- Vital que sea un número
+      };
+
       const r = await apiFetch("/admin/profesores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, ciclo_id: Number(form.ciclo_id) }),
+        body: JSON.stringify(payload),
       });
+
       if (r.ok) {
         const nuevo = await r.json();
+
+        // Añadimos el nuevo profesor a la lista.
+        // Si el backend no devuelve el objeto 'ciclo', al menos lleva 'ciclo_id'
         setProfesores((prev) => [...prev, nuevo]);
+
         setMsg("!Profesor creado correctamente.");
         setForm({ nombre: "", apellidos: "", email: "", ciclo_id: "" });
       } else {
