@@ -22,30 +22,16 @@ app = FastAPI(
     description="API para la gestión de prácticas FCT",
     version="1.0.0"
 )
-
-from starlette.middleware.base import BaseHTTPMiddleware
-
-class CORSManualMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        if request.method == "OPTIONS":
-            from starlette.responses import Response
-            return Response(
-                status_code=200,
-                headers={
-                    "Access-Control-Allow-Origin": "https://adventurous-joy-production-20dc.up.railway.app",
-                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-                    "Access-Control-Allow-Headers": "Authorization, Content-Type",
-                    "Access-Control-Allow-Credentials": "true",
-                }
-            )
-        response = await call_next(request)
-        response.headers["Access-Control-Allow-Origin"] = "https://adventurous-joy-production-20dc.up.railway.app"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-        return response
-
-app.add_middleware(CORSManualMiddleware)
+# Elimina la clase manual y usa el middleware oficial que ya habías importado arriba
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://adventurous-joy-production-20dc.up.railway.app"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos (GET, POST, OPTIONS, etc.)
+    allow_headers=["*"],  # Permite todas las cabeceras (Authorization, Content-Type, etc.)
+)
 
 # Crear la carpeta de archivos si no existe
 if not os.path.exists("uploads"):
