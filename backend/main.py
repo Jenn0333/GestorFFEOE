@@ -40,7 +40,8 @@ if not os.path.exists("uploads"):
 # Montar la carpeta para que los archivos sean accesibles vía URL
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+# Busca esta línea y cámbiala:
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login") # <--- Antes decía "token"
 
 # Dependencia para obtener la sesión de la BD
 def get_db():
@@ -365,63 +366,66 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
 
-    ciclos_existentes = {c.id for c in db.query(models.Ciclo.id).all()}
-    
-    # Envolvemos la lectura del archivo en un try-except principal
+    # 1. Leemos el contenido y lo decodificamos
+    content = await file.read()
     try:
-        reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'), delimiter=';')
-        alumnos_creados = 0
-        errores = []
-
-        for i, row in enumerate(reader):
-            temp_password = hash_password("Cambiame123")
-            try:
-                # Nos aseguramos de que existan las claves antes de leerlas
-                c_id_str = row.get('ciclo_id')
-                if not c_id_str:
-                    errores.append(f"Fila {i+1}: Falta la columna 'ciclo_id'.")
-                    continue
-                    
-                c_id = int(c_id_str)
-
-                if c_id not in ciclos_existentes:
-                    errores.append(f"Fila {i+1}: El ciclo ID {c_id} no existe.")
-                    continue
-
-                nuevo_usuario = models.Usuario(
-                    nombre=row.get('nombre', 'Sin nombre'),
-                    email=row.get('email'),
-                    password_hash=temp_password,
-                    rol="alumno"
-                )
-                db.add(nuevo_usuario)
-                db.flush() # Si falla (ej. email duplicado), salta al except
-
-                nuevo_alumno = models.Alumno(
-                    usuario_id=nuevo_usuario.id,
-                    ciclo_id=c_id
-                )
-                db.add(nuevo_alumno)
-                alumnos_creados += 1
-
-            except Exception as e:
-                # ¡CRUCIAL! Revertimos el fallo de esta fila específica para que la sesión de BD no se corrompa
-                db.rollback() 
-                errores.append(f"Fila {i+1}: Error - {str(e)}")
-
-        # Solo hacemos el commit final de los que no dieron error
-        db.commit() 
-        
-        return {
-            "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
-            "errores": errores
-        }
-        
+        decoded = content.decode('utf-8')
     except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="Error de codificación. Asegúrate de guardar tu CSV usando el formato 'CSV UTF-8 (delimitado por comas)' en Excel.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fatal leyendo el archivo: {str(e)}")
+        decoded = content.decode('latin-1') # Por si viene de un Excel viejo
 
+    import io
+    f = io.StringIO(decoded)
+    # Importante: delimiter=';' porque tu CSV usa punto y coma
+    reader = csv.DictReader(f, delimiter=';')
+    
+    alumnos_creados = 0
+    errores = []
+
+    for i, row in enumerate(reader):
+        try:
+            # Limpiamos espacios en las cabeceras por si acaso
+            row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
+            
+            email = row.get('email')
+            # Unimos nombre y apellidos para el campo 'nombre' de tu modelo
+            nombre_completo = f"{row.get('nombre', '')} {row.get('apellidos', '')}".strip()
+            c_id = row.get('ciclo_id')
+
+            if not email or not nombre_completo:
+                errores.append(f"Fila {i+1}: Faltan campos obligatorios.")
+                continue
+
+            # Verificamos si el usuario ya existe para no duplicar (y que no salte el error 500)
+            existe = db.query(models.Usuario).filter(models.Usuario.email == email).first()
+            if existe:
+                errores.append(f"Fila {i+1}: El email {email} ya está registrado.")
+                continue
+
+            nuevo_usuario = models.Usuario(
+                nombre=nombre_completo,
+                email=email,
+                password_hash=hash_password("Cambiame123"),
+                rol="alumno"
+            )
+            db.add(nuevo_usuario)
+            db.flush()
+
+            nuevo_alumno = models.Alumno(
+                usuario_id=nuevo_usuario.id,
+                ciclo_id=int(c_id)
+            )
+            db.add(nuevo_alumno)
+            alumnos_creados += 1 # Ahora sí sumará correctamente
+
+        except Exception as e:
+            db.rollback()
+            errores.append(f"Fila {i+1}: {str(e)}")
+
+    db.commit()
+    return {
+        "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
+        "errores": errores
+    }
 @app.get("/profesores/me/empresas", response_model=List[schemas.EmpresaResponse])
 def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # 1. Seguridad: Solo profesores
