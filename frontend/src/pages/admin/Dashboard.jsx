@@ -351,19 +351,23 @@ function TabProfesores() {
 
   useEffect(() => {
     setLoading(true);
-    // CAMBIO: Usamos /admin/ciclos en lugar de /ciclos
+
+    // Ejecutamos ambas peticiones
     Promise.all([
-      apiFetch("/admin/profesores").then((r) => r.json()),
-      apiFetch("/admin/ciclos").then((r) => r.json()),
+      apiFetch("/admin/profesores").then((res) => res.json()),
+      apiFetch("/admin/ciclos").then((res) => res.json()),
     ])
-      .then(([p, c]) => {
-        // Nos aseguramos de que lo que guardamos sean Arrays
-        setProfesores(Array.isArray(p) ? p : []);
-        setCiclos(Array.isArray(c) ? c : []);
+      .then(([dataProfesores, dataCiclos]) => {
+        console.log("Datos recibidos de ciclos:", dataCiclos); // MIRA ESTO EN LA CONSOLA (F12)
+
+        // Si el backend devuelve {detail: "..."}, no es un array.
+        // Nos aseguramos de que 'ciclos' sea siempre un array para que el .map no falle.
+        setProfesores(Array.isArray(dataProfesores) ? dataProfesores : []);
+        setCiclos(Array.isArray(dataCiclos) ? dataCiclos : []);
       })
       .catch((err) => {
-        console.error("Error cargando datos:", err);
-        setMsg("Error al cargar la lista de ciclos o profesores.");
+        console.error("Error en la carga:", err);
+        setMsg("Error al conectar con el servidor.");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -466,12 +470,18 @@ function TabProfesores() {
               required
             >
               <option value="">Selecciona un ciclo...</option>
-              {Array.isArray(ciclos) &&
+              {/* Comprobamos que ciclos sea un array y tenga contenido */}
+              {Array.isArray(ciclos) && ciclos.length > 0 ? (
                 ciclos.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.nombre}
+                    {c.nombre} ({c.anno_inicio}-{c.anno_fin})
                   </option>
-                ))}
+                ))
+              ) : (
+                <option disabled>
+                  No hay ciclos creados. Créalos en la pestaña Ciclos.
+                </option>
+              )}
             </select>
           </div>
           <button type="submit" disabled={guardando} style={styles.btnPrimario}>
