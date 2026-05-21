@@ -365,50 +365,62 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
 
-    # 1. Obtener todos los IDs de ciclos existentes para validar rápido
     ciclos_existentes = {c.id for c in db.query(models.Ciclo.id).all()}
-    reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'), delimiter=';')
-    alumnos_creados = 0
-    errores = []
-
-    for i, row in enumerate(reader):
-        temp_password = hash_password("Cambiame123")
-        try:
-            # Dentro del bucle de importación:
-            c_id = int(row['ciclo_id'])
-
-            # VALIDACIÓN: Si el ciclo no existe, saltamos la fila y avisamos
-            if c_id not in ciclos_existentes:
-                errores.append(f"Fila {i+1}: El ciclo ID {c_id} no existe.")
-                continue
-
-            # Creación del usuario
-            nuevo_usuario = models.Usuario(
-                nombre=row['nombre'],
-                email=row['email'],
-                password_hash=temp_password,
-                rol="alumno"
-            )
-            db.add(nuevo_usuario)
-            db.flush() # Esto asigna el ID a nuevo_usuario sin cerrar la transacción
-
-            # Creación del alumno
-            nuevo_alumno = models.Alumno(
-                usuario_id=nuevo_usuario.id, # Vinculación correcta
-                ciclo_id=c_id
-            )
-            db.add(nuevo_alumno)
-            alumnos_creados += 1
-
-        except Exception as e:
-            errores.append(f"Fila {i+1}: Error inesperado - {str(e)}")
-
-    db.commit()
     
-    return {
-        "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
-        "errores": errores # Esto ayuda al profesor a saber qué filas fallaron
-    }
+    # Envolvemos la lectura del archivo en un try-except principal
+    try:
+        reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'), delimiter=';')
+        alumnos_creados = 0
+        errores = []
+
+        for i, row in enumerate(reader):
+            temp_password = hash_password("Cambiame123")
+            try:
+                # Nos aseguramos de que existan las claves antes de leerlas
+                c_id_str = row.get('ciclo_id')
+                if not c_id_str:
+                    errores.append(f"Fila {i+1}: Falta la columna 'ciclo_id'.")
+                    continue
+                    
+                c_id = int(c_id_str)
+
+                if c_id not in ciclos_existentes:
+                    errores.append(f"Fila {i+1}: El ciclo ID {c_id} no existe.")
+                    continue
+
+                nuevo_usuario = models.Usuario(
+                    nombre=row.get('nombre', 'Sin nombre'),
+                    email=row.get('email'),
+                    password_hash=temp_password,
+                    rol="alumno"
+                )
+                db.add(nuevo_usuario)
+                db.flush() # Si falla (ej. email duplicado), salta al except
+
+                nuevo_alumno = models.Alumno(
+                    usuario_id=nuevo_usuario.id,
+                    ciclo_id=c_id
+                )
+                db.add(nuevo_alumno)
+                alumnos_creados += 1
+
+            except Exception as e:
+                # ¡CRUCIAL! Revertimos el fallo de esta fila específica para que la sesión de BD no se corrompa
+                db.rollback() 
+                errores.append(f"Fila {i+1}: Error - {str(e)}")
+
+        # Solo hacemos el commit final de los que no dieron error
+        db.commit() 
+        
+        return {
+            "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
+            "errores": errores
+        }
+        
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Error de codificación. Asegúrate de guardar tu CSV usando el formato 'CSV UTF-8 (delimitado por comas)' en Excel.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fatal leyendo el archivo: {str(e)}")
 
 @app.get("/profesores/me/empresas", response_model=List[schemas.EmpresaResponse])
 def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
