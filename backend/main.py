@@ -23,12 +23,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Permitir que el Frontend se conecte
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "adventurous-joy-production-20dc.up.railway.app",  
+        "https://adventurous-joy-production-20dc.up.railway.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
