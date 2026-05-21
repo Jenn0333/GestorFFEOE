@@ -141,22 +141,29 @@ function TabCiclos() {
   };
 
   const handleEliminar = async (id) => {
-    if (!window.confirm("¿Seguro que quieres eliminar este ciclo?")) return;
-    setMsg("");
+    // 1. Confirmación inmediata
+    if (!window.confirm("¿Estás seguro de eliminar este ciclo?")) return;
+
+    setMsg(""); // Limpiar mensajes previos
 
     try {
-      const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
+      // 2. Llamada a la API (Sin barra final después del ID)
+      const r = await apiFetch(`/ciclos/${id}`, {
+        method: "DELETE",
+      });
+
+      const data = await r.json();
 
       if (r.ok) {
+        // Éxito
         setCiclos((prev) => prev.filter((c) => c.id !== id));
         setMsg("!Ciclo eliminado correctamente.");
       } else {
-        // Aquí es donde el backend nos dice que hay alumnos
-        const data = await r.json();
-        setMsg(data.detail || "No se puede eliminar el ciclo.");
+        // Aquí es donde CAPTURAMOS tu mensaje de "No se puede eliminar porque tiene alumnos"
+        setMsg(data.detail || "Error al eliminar el ciclo.");
       }
     } catch (error) {
-      setMsg("Error de conexión al intentar eliminar.");
+      setMsg("Error de conexión con el servidor.");
     }
   };
 
@@ -351,23 +358,17 @@ function TabProfesores() {
 
   useEffect(() => {
     setLoading(true);
-
-    // Ejecutamos ambas peticiones
     Promise.all([
-      apiFetch("/admin/profesores").then((res) => res.json()),
-      apiFetch("/admin/ciclos").then((res) => res.json()),
+      apiFetch("/admin/profesores").then((r) => r.json()),
+      apiFetch("/admin/ciclos").then((r) => r.json()), // Asegúrate que lleva el /admin delante
     ])
-      .then(([dataProfesores, dataCiclos]) => {
-        console.log("Datos recibidos de ciclos:", dataCiclos); // MIRA ESTO EN LA CONSOLA (F12)
-
-        // Si el backend devuelve {detail: "..."}, no es un array.
-        // Nos aseguramos de que 'ciclos' sea siempre un array para que el .map no falle.
-        setProfesores(Array.isArray(dataProfesores) ? dataProfesores : []);
-        setCiclos(Array.isArray(dataCiclos) ? dataCiclos : []);
+      .then(([p, c]) => {
+        // Forzamos que sean arrays para que el .map no falle
+        setProfesores(Array.isArray(p) ? p : []);
+        setCiclos(Array.isArray(c) ? c : []);
       })
-      .catch((err) => {
-        console.error("Error en la carga:", err);
-        setMsg("Error al conectar con el servidor.");
+      .catch(() => {
+        setMsg("Error al cargar datos del servidor.");
       })
       .finally(() => setLoading(false));
   }, []);
