@@ -13,6 +13,9 @@ class CicloCreate(CicloBase):
 
 class CicloResponse(CicloBase):
     id: int
+    nombre: str
+    anio_inicio: int
+    anio_fin: int
     model_config = {"from_attributes": True}
 
 # ========== ESQUEMAS DE USUARIOS ==========
@@ -50,8 +53,10 @@ class AlumnoResponse(BaseModel):
     estado_asignacion: str
     cv_url: Optional[str] = None
     
-    # Para que el Frontend vea el nombre y email del usuario base
-    # (Esto requiere usar 'from_attributes' y acceder a la relación en el modelo)
+    # Le decimos a Pydantic que incluya el objeto completo de la relación
+    usuario_base: UsuarioResponse  # Para que el Front lea alumno.usuario_base.nombre
+    ciclo: CicloResponse          # Para que el Front lea alumno.ciclo.nombre
+    
     model_config = {"from_attributes": True}
 
 class AlumnoUpdate(BaseModel):
