@@ -107,19 +107,25 @@ def editar_ciclo(ciclo_id: int, ciclo_actualizado: schemas.CicloCreate, db: Sess
     db.refresh(db_ciclo)
     return db_ciclo
 
+from sqlalchemy.exc import IntegrityError
+
 @app.delete("/ciclos/{ciclo_id}")
 def borrar_ciclo(ciclo_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    # 1. Buscar el ciclo
     db_ciclo = db.query(models.Ciclo).filter(models.Ciclo.id == ciclo_id).first()
     
     if not db_ciclo:
         raise HTTPException(status_code=404, detail="El ciclo no existe")
 
-    # 2. Eliminarlo de la base de datos
-    db.delete(db_ciclo)
-    db.commit()
-    
-    return {"message": f"Ciclo {db_ciclo.nombre} eliminado correctamente"}
+    try:
+        db.delete(db_ciclo)
+        db.commit()
+        return {"message": f"Ciclo {db_ciclo.nombre} eliminado correctamente"}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail="No se puede eliminar el ciclo porque tiene alumnos o plazas asociadas. Borra primero a los alumnos."
+        )
 
 @app.post("/ciclos/{ciclo_id}/asignar-profesor/{usuario_id}")
 def asignar_profe_a_ciclo(ciclo_id: int, usuario_id: int, db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
