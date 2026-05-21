@@ -52,6 +52,13 @@ export default function Login() {
       const tokenPayload = JSON.parse(atob(data.access_token.split(".")[1]));
       const rolReal = tokenPayload.rol;
 
+      // Si el rol seleccionado no coincide con el rol real, mostrar error
+      if (role !== rolReal) {
+        setError("El rol seleccionado no coincide con tu cuenta.");
+        setLoading(false);
+        return;
+      }
+
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("role", rolReal);
 
