@@ -140,12 +140,83 @@ function TabCiclos() {
     }
   };
 
+  // 1. CAMBIO AQUÍ: Función handleEliminar actualizada
   const handleEliminar = async (id) => {
     if (!window.confirm("¿Eliminar este ciclo?")) return;
+    setMsg(""); 
     try {
       const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
-      if (r.ok) setCiclos((prev) => prev.filter((c) => c.id !== id));
-    } catch {}
+      if (r.ok) {
+        setCiclos((prev) => prev.filter((c) => c.id !== id));
+        setMsg("!Ciclo eliminado correctamente."); // El ! lo pone en verde
+      } else {
+        // Aquí capturamos el mensaje de "Tiene alumnos" del backend
+        const data = await r.json();
+        setMsg(data.detail || "Error al eliminar el ciclo.");
+      }
+    } catch {
+      setMsg("No se pudo conectar con el servidor.");
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {/* Formulario nuevo ciclo */}
+      <Card title="Crear nuevo ciclo formativo">
+        <form onSubmit={handleCrear} style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+          {/* ... tus inputs ... */}
+          <button type="submit" disabled={guardando} style={styles.btnPrimario}>
+            {guardando ? "Creando..." : "Crear ciclo"}
+          </button>
+          <MensajeFeedback msg={msg} />
+        </form>
+      </Card>
+
+      {/* Lista de ciclos */}
+      <Card title={`Ciclos existentes (${ciclos.length})`}>
+        {loading ? (
+          <p>Cargando...</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {ciclos.map((c) => (
+              <div key={c.id} style={styles.listaItem}>
+                {/* ... info del ciclo ... */}
+                <button onClick={() => handleEliminar(c.id)} style={styles.btnDanger}>
+                  Eliminar
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* 2. CAMBIO AQUÍ: Ponemos el mensaje también al final de la lista */}
+        <div style={{ marginTop: "1rem" }}>
+          <MensajeFeedback msg={msg} />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+  const handleEliminar = async (id) => {
+    if (!window.confirm("¿Eliminar este ciclo?")) return;
+    setMsg(""); // Limpiamos mensajes previos
+
+    try {
+      const r = await apiFetch(`/ciclos/${id}`, { method: "DELETE" });
+
+      if (r.ok) {
+        // Si sale bien, filtramos la lista y mostramos éxito
+        setCiclos((prev) => prev.filter((c) => c.id !== id));
+        setMsg("!Ciclo eliminado correctamente.");
+      } else {
+        // AQUÍ capturamos el error 400 que enviamos desde el backend
+        const data = await r.json();
+        setMsg(data.detail || "Error al eliminar el ciclo.");
+      }
+    } catch (error) {
+      setMsg("No se pudo conectar con el servidor.");
+    }
   };
 
   return (
