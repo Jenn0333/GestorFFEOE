@@ -377,61 +377,86 @@ async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depen
     try:
         decoded = content.decode('utf-8')
     except UnicodeDecodeError:
-        decoded = content.decode('latin-1') # Por si viene de un Excel viejo
+        decoded = content.decode('latin-1') 
 
     import io
     f = io.StringIO(decoded)
-    # Importante: delimiter=';' porque tu CSV usa punto y coma
-    reader = csv.DictReader(f, delimiter=';')
     
+    # DETECTOR AUTOMÁTICO DE DELIMITADOR (Comas o Puntos y comas)
+    # Lee los primeros caracteres para saber si el usuario subió comas o punto y coma
+    try:
+        dialect = csv.Sniffer().sniff(f.read(1024), delimiters=',;')
+        f.seek(0)
+        reader = csv.DictReader(f, dialect=dialect)
+    except Exception:
+        # Por si el sniffer falla, dejamos el de comas por defecto
+        f.seek(0)
+        reader = csv.DictReader(f, delimiter=',')
+
     alumnos_creados = 0
     errores = []
 
     for i, row in enumerate(reader):
-        try:
-            # Limpiamos espacios en las cabeceras por si acaso
-            row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
-            
-            email = row.get('email')
-            # Unimos nombre y apellidos para el campo 'nombre' de tu modelo
-            nombre_completo = f"{row.get('nombre', '')} {row.get('apellidos', '')}".strip()
-            c_id = row.get('ciclo_id')
+        # Creamos un bloque de transacción aislado para esta fila concreta
+        with db.begin_nested():
+            try:
+                # Limpiamos espacios y convertimos cabeceras a minúsculas
+                row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
+                
+                email = row.get('email')
+                nombre = row.get('nombre', '')
+                apellidos = row.get('apellidos', '')
+                nombre_completo = f"{nombre} {apellidos}".strip()
+                c_id = row.get('ciclo_id')
 
-            if not email or not nombre_completo:
-                errores.append(f"Fila {i+1}: Faltan campos obligatorios.")
-                continue
+                # Validaciones previas
+                if not email or not nombre_completo or not c_id:
+                    errores.append(f"Fila {i+1}: Faltan campos obligatorios (email, nombre, apellidos o ciclo_id).")
+                    continue
 
-            # Verificamos si el usuario ya existe para no duplicar (y que no salte el error 500)
-            existe = db.query(models.Usuario).filter(models.Usuario.email == email).first()
-            if existe:
-                errores.append(f"Fila {i+1}: El email {email} ya está registrado.")
-                continue
+                # Verificamos si el usuario ya existe
+                existe = db.query(models.Usuario).filter(models.Usuario.email == email).first()
+                if existe:
+                    errores.append(f"Fila {i+1}: El email {email} ya está registrado.")
+                    continue
 
-            nuevo_usuario = models.Usuario(
-                nombre=nombre_completo,
-                email=email,
-                password_hash=hash_password("Cambiame123"),
-                rol="alumno"
-            )
-            db.add(nuevo_usuario)
-            db.flush()
+                # Opcional: Validar que el ciclo con ese ID exista de verdad en la base de datos
+                ciclo_existe = db.query(models.Ciclo).filter(models.Ciclo.id == int(c_id)).first()
+                if not ciclo_existe:
+                    errores.append(f"Fila {i+1}: El ciclo_id {c_id} no existe en el sistema.")
+                    continue
 
-            nuevo_alumno = models.Alumno(
-                usuario_id=nuevo_usuario.id,
-                ciclo_id=int(c_id)
-            )
-            db.add(nuevo_alumno)
-            alumnos_creados += 1 # Ahora sí sumará correctamente
+                # Creamos el Usuario base
+                nuevo_usuario = models.Usuario(
+                    nombre=nombre_completo,
+                    email=email,
+                    password_hash=hash_password("Cambiame123"),
+                    rol="alumno"
+                )
+                db.add(nuevo_usuario)
+                db.flush()  # Genera el ID del usuario necesario para la FK del alumno
 
-        except Exception as e:
-            db.rollback()
-            errores.append(f"Fila {i+1}: {str(e)}")
+                # Creamos el Alumno asociado
+                nuevo_alumno = models.Alumno(
+                    usuario_id=nuevo_usuario.id,
+                    ciclo_id=int(c_id)
+                )
+                db.add(nuevo_alumno)
+                alumnos_creados += 1 
 
+            except Exception as e:
+                # Al usar 'with db.begin_nested()', si salta un error aquí,
+                # SQLAlchemy hace un rollback interno de SOLO esta fila. No borra las demás.
+                errores.append(f"Fila {i+1}: Error inesperado -> {str(e)}")
+
+    # Al salir del bucle, consolidamos permanentemente todos los registros correctos
     db.commit()
+    
     return {
-        "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
+        "message": f"Importación finalizada. {alumnos_creados} alumnos creados con éxito.",
         "errores": errores
     }
+
 @app.get("/profesores/me/empresas", response_model=List[schemas.EmpresaResponse])
 def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     # 1. Seguridad: Solo profesores
