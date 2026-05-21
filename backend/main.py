@@ -22,6 +22,18 @@ app = FastAPI(
     description="API para la gestión de prácticas FCT",
     version="1.0.0"
 )
+
+# CORS PRIMERO - antes de todo
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://adventurous-joy-production-20dc.up.railway.app", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Luego el handler de OPTIONS
 from fastapi import Request
 from fastapi.responses import Response
 
@@ -37,13 +49,6 @@ async def preflight_handler(rest_of_path: str, request: Request):
         }
     )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://adventurous-joy-production-20dc.up.railway.app", "http://localhost:5173"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 # Crear la carpeta de archivos si no existe
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
