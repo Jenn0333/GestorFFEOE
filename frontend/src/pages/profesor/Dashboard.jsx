@@ -168,8 +168,7 @@ function TabAlumnos() {
             marginBottom: "0.8rem",
           }}
         >
-          El CSV debe tener las columnas:{" "}
-          <code>nombre, apellidos, email, ciclo</code>
+          El CSV debe tener las columnas: <code>`nombre;email;ciclo_id`</code>
         </p>
         <label style={styles.dropzone}>
           <input
