@@ -351,100 +351,68 @@ def obtener_perfil_profesor(db: Session = Depends(get_db), current_user: models.
     
     # 2. Devolvemos los datos del usuario (que es el profesor)
     return current_user
-
 @app.get("/profesores/me/alumnos")
 def obtener_mis_alumnos(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
-    # 1. Seguridad: Solo los profesores pueden ver sus alumnos
+    if current_user.rol != "profesor":
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    
+    ciclos_ids = [ciclo.id for ciclo in current_user.ciclos_gestionados]
+    
+    # Si el profesor no tiene ciclos asignados, devolver todos los alumnos
+    if not ciclos_ids:
+        alumnos = db.query(models.Alumno).all()
+    else:
+        alumnos = db.query(models.Alumno).filter(models.Alumno.ciclo_id.in_(ciclos_ids)).all()
+    
+    resultado = []
+    for alumno in alumnos:
+        usuario = db.query(models.Usuario).filter(models.Usuario.id == alumno.usuario_id).first()
+        ciclo = db.query(models.Ciclo).filter(models.Ciclo.id == alumno.ciclo_id).first()
+        resultado.append({
+            "id": alumno.id,
+            "nombre": usuario.nombre if usuario else "—",
+            "apellidos": "",
+            "email": usuario.email if usuario else "—",
+            "ciclo": ciclo.nombre if ciclo else "—",
+            "estado_asignacion": alumno.estado_asignacion,
+            "empresa": None,
+        })
+    return resultado
+
+
+@app.get("/profesores/me/empresas")
+def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):
     if current_user.rol != "profesor":
         raise HTTPException(status_code=403, detail="Acceso denegado")
 
-    # 2. Buscamos los IDs de los ciclos que tiene asignados este profesor
-    # Miramos en la tabla intermedia 'profesor_ciclo'
     ciclos_ids = [ciclo.id for ciclo in current_user.ciclos_gestionados]
-    
-    # 3. Traemos todos los alumnos que pertenezcan a esos ciclos
-    alumnos = db.query(models.Alumno).filter(models.Alumno.ciclo_id.in_(ciclos_ids)).all()
-    
-    return alumnos
 
-@app.post("/profesores/me/alumnos/importar")
-async def importar_alumnos_csv(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.Usuario = Depends(check_profesor_role)):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
+    # Si no tiene ciclos, devolver todas las empresas
+    if not ciclos_ids:
+        empresas = db.query(models.Empresa).all()
+    else:
+        empresas = db.query(models.Empresa).join(models.Plaza).filter(
+            models.Plaza.ciclo_id.in_(ciclos_ids)
+        ).distinct().all()
 
-    # 1. Leemos el contenido y lo decodificamos
-    content = await file.read()
-    try:
-        decoded = content.decode('utf-8')
-    except UnicodeDecodeError:
-        decoded = content.decode('latin-1') 
-
-    import io
-    f = io.StringIO(decoded)
-    
-    # DETECTOR AUTOMÁTICO DE DELIMITADOR (Comas o Puntos y comas)
-    try:
-        dialect = csv.Sniffer().sniff(f.read(1024), delimiters=',;')
-        f.seek(0)
-        reader = csv.DictReader(f, dialect=dialect)
-    except Exception:
-        f.seek(0)
-        reader = csv.DictReader(f, delimiter=';') # Por si acaso, dejamos punto y coma por defecto
-
-    alumnos_creados = 0
-    errores = []
-
-    for i, row in enumerate(reader):
-        # CREAMOS UN ESCUDO SEGURO PARA ESTA FILA CON begin_nested()
-        with db.begin_nested():
-            try:
-                # Limpiamos espacios en las cabeceras por si acaso
-                row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
-                
-                email = row.get('email')
-                nombre_completo = f"{row.get('nombre', '')} {row.get('apellidos', '')}".strip()
-                c_id = row.get('ciclo_id')
-
-                if not email or not nombre_completo or not c_id:
-                    errores.append(f"Fila {i+1}: Faltan campos obligatorios.")
-                    continue
-
-                # Verificamos si el usuario ya existe para no duplicar
-                existe = db.query(models.Usuario).filter(models.Usuario.email == email).first()
-                if existe:
-                    errores.append(f"Fila {i+1}: El email {email} ya está registrado.")
-                    continue
-
-                # Guardamos el Usuario base
-                nuevo_usuario = models.Usuario(
-                    nombre=nombre_completo,
-                    email=email,
-                    password_hash=hash_password("Cambiame123"),
-                    rol="alumno"
-                )
-                db.add(nuevo_usuario)
-                db.flush() # Esto asigna el ID en memoria intermedia
-
-                # Guardamos el Alumno
-                nuevo_alumno = models.Alumno(
-                    usuario_id=nuevo_usuario.id,
-                    ciclo_id=int(c_id)
-                )
-                db.add(nuevo_alumno)
-                alumnos_creados += 1 
-
-            except Exception as e:
-                # Si algo falla aquí dentro, el bloque 'with' hace un rollback automático
-                # que SOLO afecta a esta fila, manteniendo vivas las filas anteriores.
-                errores.append(f"Fila {i+1}: Error -> {str(e)}")
-
-    # AL FINAL DEL BUCLE, HACEMOS EL COMMIT REAL EN LA BASE DE DATOS
-    db.commit()
-    
-    return {
-        "message": f"Importación finalizada. {alumnos_creados} alumnos creados.",
-        "errores": errores
-    }
+    resultado = []
+    for empresa in empresas:
+        plazas = db.query(models.Plaza).filter(models.Plaza.empresa_id == empresa.id).all()
+        total = sum(p.cantidad_total for p in plazas)
+        ocupadas = sum(p.cantidad_ocupada for p in plazas)
+        resultado.append({
+            "id": empresa.id,
+            "nombre": empresa.nombre,
+            "email": empresa.email,
+            "telefono": empresa.telefono,
+            "direccion": empresa.direccion,
+            "web": empresa.web,
+            "persona_contacto": empresa.persona_contacto,
+            "responsable_legal_dni": empresa.responsable_legal_dni,
+            "tutores": [],
+            "plazas_disponibles": total - ocupadas,
+        })
+    return resultado
 
 @app.get("/profesores/me/empresas", response_model=List[schemas.EmpresaResponse])
 def obtener_mis_empresas(db: Session = Depends(get_db), current_user: models.Usuario = Depends(get_current_user)):

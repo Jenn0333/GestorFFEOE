@@ -26,8 +26,6 @@ const C = {
   muted: "#888780",
 };
 
-// ── Componentes pequeños ──────────────────────────────────────────────────────
-
 function EstadoBadge({ estado }) {
   const map = {
     Pendiente: { bg: C.amberLight, color: C.amber, dot: "#EF9F27" },
@@ -92,7 +90,7 @@ function Card({ title, children, style }) {
 
 function MensajeFeedback({ msg }) {
   if (!msg) return null;
-  const ok = msg.startsWith("!"); // convenio: empieza con ! = éxito
+  const ok = msg.startsWith("!");
   return (
     <p
       style={{
@@ -117,8 +115,8 @@ function TabAlumnos() {
   useEffect(() => {
     apiFetch("/profesores/me/alumnos")
       .then((r) => r.json())
-      .then(setAlumnos)
-      .catch(() => {})
+      .then((data) => setAlumnos(Array.isArray(data) ? data : []))
+      .catch(() => setAlumnos([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -136,14 +134,12 @@ function TabAlumnos() {
       });
       const data = await r.json();
       if (r.ok) {
-        setCsvMsg(`!Se importaron ${data.message} alumnos correctamente.`);
-        // Recargar lista
+        setCsvMsg(`!${data.message}`);
         apiFetch("/profesores/me/alumnos")
           .then((r) => r.json())
-          .then(setAlumnos);
+          .then((data) => setAlumnos(Array.isArray(data) ? data : []));
       } else {
-        const errorData = await r.json();
-        setCsvMsg(`Error: ${JSON.stringify(errorData)}`);
+        setCsvMsg(`Error: ${data.detail || JSON.stringify(data)}`);
       }
     } catch {
       setCsvMsg("No se pudo conectar con el servidor.");
@@ -152,15 +148,16 @@ function TabAlumnos() {
     }
   };
 
-  const filtrados = alumnos.filter((a) =>
-    `${a.nombre} ${a.apellidos} ${a.email}`
-      .toLowerCase()
-      .includes(busqueda.toLowerCase()),
-  );
+  const filtrados = Array.isArray(alumnos)
+    ? alumnos.filter((a) =>
+        `${a.nombre || ""} ${a.apellidos || ""} ${a.email || ""}`
+          .toLowerCase()
+          .includes(busqueda.toLowerCase()),
+      )
+    : [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {/* Importar CSV */}
       <Card title="Importar alumnos desde CSV">
         <p
           style={{
@@ -169,7 +166,8 @@ function TabAlumnos() {
             marginBottom: "0.8rem",
           }}
         >
-          El CSV debe tener las columnas: <code>`nombre;email;ciclo_id`</code>
+          El CSV debe tener: <code>nombre;email;ciclo_id</code> (separado por
+          punto y coma)
         </p>
         <label style={styles.dropzone}>
           <input
@@ -187,7 +185,6 @@ function TabAlumnos() {
         <MensajeFeedback msg={csvMsg} />
       </Card>
 
-      {/* Lista de alumnos */}
       <Card title={`Alumnos (${alumnos.length})`}>
         <input
           placeholder="Buscar por nombre o email..."
@@ -239,8 +236,6 @@ function TabEmpresas() {
   const [csvMsg, setCsvMsg] = useState("");
   const [subiendoCsv, setSubiendoCsv] = useState(false);
   const [contactoMsg, setContactoMsg] = useState("");
-
-  // Formulario nuevo contacto
   const [contactoForm, setContactoForm] = useState({
     empresa_id: "",
     nota: "",
@@ -249,8 +244,8 @@ function TabEmpresas() {
   useEffect(() => {
     apiFetch("/profesores/me/empresas")
       .then((r) => r.json())
-      .then(setEmpresas)
-      .catch(() => {})
+      .then((data) => setEmpresas(Array.isArray(data) ? data : []))
+      .catch(() => setEmpresas([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -268,10 +263,10 @@ function TabEmpresas() {
       });
       const data = await r.json();
       if (r.ok) {
-        setCsvMsg(`!Se importaron ${data.message} empresas correctamente.`);
+        setCsvMsg(`!${data.message}`);
         apiFetch("/profesores/me/empresas")
           .then((r) => r.json())
-          .then(setEmpresas);
+          .then((data) => setEmpresas(Array.isArray(data) ? data : []));
       } else {
         setCsvMsg("Error al importar. Comprueba el formato del CSV.");
       }
@@ -286,13 +281,14 @@ function TabEmpresas() {
     e.preventDefault();
     setContactoMsg("");
     try {
-      const r = await apiFetch("/profesores/me/contactos", {
+      const r = await apiFetch("/seguimientos/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           empresa_id: Number(contactoForm.empresa_id),
-          nota: contactoForm.nota,
-          fecha: new Date().toISOString(),
+          profesor_id: 1,
+          comentarios: contactoForm.nota,
+          fecha_hora: new Date().toISOString(),
         }),
       });
       if (r.ok) {
@@ -308,7 +304,6 @@ function TabEmpresas() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {/* Importar CSV */}
       <Card title="Importar empresas desde CSV">
         <p
           style={{
@@ -318,7 +313,9 @@ function TabEmpresas() {
           }}
         >
           El CSV debe tener:{" "}
-          <code>nombre, direccion, web, email, telefono, contacto_nombre</code>
+          <code>
+            nombre;direccion;web;email;telefono;persona_contacto;responsable_legal_dni
+          </code>
         </p>
         <label style={styles.dropzone}>
           <input
@@ -336,7 +333,6 @@ function TabEmpresas() {
         <MensajeFeedback msg={csvMsg} />
       </Card>
 
-      {/* Registrar contacto con empresa */}
       <Card title="Registrar contacto con empresa">
         <form
           onSubmit={handleRegistrarContacto}
@@ -380,7 +376,6 @@ function TabEmpresas() {
         </form>
       </Card>
 
-      {/* Lista empresas */}
       <Card title={`Empresas (${empresas.length})`}>
         {loading ? (
           <p style={{ color: C.muted, fontSize: "0.85rem" }}>Cargando...</p>
@@ -435,7 +430,7 @@ function TabEmpresas() {
   );
 }
 
-// ── Pestaña Asignaciones (drag & drop simplificado) ───────────────────────────
+// ── Pestaña Asignaciones ──────────────────────────────────────────────────────
 function TabAsignaciones() {
   const [alumnos, setAlumnos] = useState([]);
   const [empresas, setEmpresas] = useState([]);
@@ -451,8 +446,8 @@ function TabAsignaciones() {
       apiFetch("/profesores/me/empresas").then((r) => r.json()),
     ])
       .then(([a, e]) => {
-        setAlumnos(a);
-        setEmpresas(e);
+        setAlumnos(Array.isArray(a) ? a : []);
+        setEmpresas(Array.isArray(e) ? e : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -472,16 +467,15 @@ function TabAsignaciones() {
           empresa_id: Number(empresaSeleccionada),
         }),
       });
+      const data = await r.json();
       if (r.ok) {
         setMsg("!Alumno asignado correctamente.");
         setAlumnoSeleccionado("");
         setEmpresaSeleccionada("");
-        // Refrescar alumnos para actualizar estados
         apiFetch("/profesores/me/alumnos")
           .then((r) => r.json())
-          .then(setAlumnos);
+          .then((data) => setAlumnos(Array.isArray(data) ? data : []));
       } else {
-        const data = await r.json();
         setMsg(
           data.detail || "Error al asignar. Comprueba las plazas disponibles.",
         );
@@ -498,7 +492,6 @@ function TabAsignaciones() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-      {/* Formulario de asignación */}
       <Card title="Asignar alumno a empresa">
         {loading ? (
           <p style={{ color: C.muted, fontSize: "0.85rem" }}>
@@ -557,7 +550,6 @@ function TabAsignaciones() {
         )}
       </Card>
 
-      {/* Resumen de asignaciones */}
       <div
         style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}
       >
@@ -669,7 +661,6 @@ export default function ProfesorDashboard() {
 
   return (
     <div style={styles.page}>
-      {/* Navbar */}
       <header style={styles.navbar}>
         <div style={styles.navLogo}>
           <div style={styles.navLogoMark}>G</div>
@@ -680,7 +671,7 @@ export default function ProfesorDashboard() {
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <span style={{ color: C.greenMid, fontSize: "0.82rem" }}>
             {profesor
-              ? `${profesor.nombre} ${profesor.apellidos}`
+              ? `${profesor.nombre} ${profesor.apellidos || ""}`
               : "Profesor/a"}
           </span>
           <div style={styles.avatar}>{iniciales}</div>
@@ -691,13 +682,11 @@ export default function ProfesorDashboard() {
       </header>
 
       <main style={styles.main}>
-        {/* Cabecera */}
         <div style={{ marginBottom: "1.5rem" }}>
           <p style={styles.eyebrow}>Panel del profesor</p>
           <h1 style={styles.pageTitle}>Gestión de prácticas</h1>
         </div>
 
-        {/* Tabs */}
         <div style={styles.tabBar}>
           {TABS.map((tab) => (
             <button
@@ -713,14 +702,12 @@ export default function ProfesorDashboard() {
           ))}
         </div>
 
-        {/* Contenido de la tab activa */}
         <TabComponente />
       </main>
     </div>
   );
 }
 
-// ── Estilos ───────────────────────────────────────────────────────────────────
 const styles = {
   page: {
     minHeight: "100vh",
